@@ -86,22 +86,20 @@ def _show_main_menu() -> bool:
         console.print("  [cyan]1.[/cyan] Cadastrar/Listar API Keys")
         console.print("  [cyan]2.[/cyan] Listar Modelos de Dados (Schemas)")
         console.print("  [cyan]3.[/cyan] Fontes de Dados")
-        console.print("  [cyan]4.[/cyan] Listar Modelos de Dados (Schemas)")
         console.print("  [cyan]0.[/cyan] Sair")
         
         # Obter escolha do usuário
         choice = Prompt.ask(
             "\n🎯 Escolha uma opção",
-            choices=["0", "1", "2", "3", "4"],
+            choices=["0", "1", "2", "3"],
             default="0"
         )
         
         # Menu de opções
         menu_options: Dict[str, Callable[[], bool]] = {
             "1": register_api_key,
-            "2": list_api_keys,
+            "2": list_schemas,
             "3": run_datasources_menu,
-            "4": list_schemas,
             "0": lambda: False  # Sair
         }
         
