@@ -9,8 +9,16 @@ from rich.prompt import Prompt
 from rich.text import Text
 
 from core.secrets_store import secrets_store
+from core.datasources_store import datasources_store
 from core.logger import logger
 from setup.actions import register_api_key, list_api_keys, list_schemas, show_statistics
+from setup.datasources_menu import run_datasources_menu
+
+
+from setup.ui_helpers import (
+    show_success_message, show_error_message, show_warning_message, 
+    show_info_message, wait_for_continue, show_header, show_separator
+)
 
 
 console = Console()
@@ -67,39 +75,37 @@ def _show_main_menu() -> bool:
         # Limpar tela (opcional)
         console.clear()
         
-        # Cabeçalho
-        title = Text("Bridge Setup", style="bold blue")
-        header = Panel(
-            title,
-            subtitle="DataSnap API Management",
-            border_style="blue",
-            padding=(1, 2)
+        # Exibir cabeçalho
+        show_header()
+        
+        # Exibir estatísticas rápidas
+        _show_quick_stats()
+        
+        # Exibir opções do menu
+        console.print("\n📋 [bold]Opções disponíveis:[/bold]")
+        console.print("  [cyan]1.[/cyan] Cadastrar/Listar API Keys")
+        console.print("  [cyan]2.[/cyan] Listar Modelos de Dados (Schemas)")
+        console.print("  [cyan]3.[/cyan] Fontes de Dados")
+        console.print("  [cyan]4.[/cyan] Listar Modelos de Dados (Schemas)")
+        console.print("  [cyan]0.[/cyan] Sair")
+        
+        # Obter escolha do usuário
+        choice = Prompt.ask(
+            "\n🎯 Escolha uma opção",
+            choices=["0", "1", "2", "3", "4"],
+            default="0"
         )
-        console.print(header)
-        
-        # Estatísticas rápidas
-        show_statistics()
-        
-        # Contar API Keys para exibir no menu
-        keys_count = secrets_store.get_keys_count()
-        
-        # Opções do menu
-        console.print("\n[bold]Menu Principal:[/bold]")
-        console.print("[1] 📝 Cadastrar API Key")
-        console.print(f"[2] 🔑 Listar API Keys ({keys_count})")
-        console.print("[3] 📊 Listar Modelos de Dados (Schemas)")
-        console.print("[0] 🚪 Sair")
         
         # Menu de opções
         menu_options: Dict[str, Callable[[], bool]] = {
             "1": register_api_key,
             "2": list_api_keys,
-            "3": list_schemas,
+            "3": run_datasources_menu,
+            "4": list_schemas,
             "0": lambda: False  # Sair
         }
         
         while True:
-            choice = Prompt.ask("\nEscolha uma opção", default="0").strip()
             
             logger.debug(f"🎯 Opção selecionada no menu principal: {choice}")
             
@@ -115,18 +121,18 @@ def _show_main_menu() -> bool:
                     
                     # Aguardar antes de voltar ao menu
                     if result:
-                        _wait_for_continue()
+                        wait_for_continue()
                     
                     return True  # Continuar no menu
                     
                 except Exception as e:
                     logger.exception(f"❌ Erro na operação do menu {choice}: {e}")
                     console.print(f"[red]❌ Erro na operação: {e}[/red]")
-                    _wait_for_continue()
+                    wait_for_continue()
                     return True
             else:
                 logger.warning(f"⚠️ Opção inválida selecionada: {choice}")
-                console.print("[red]❌ Opção inválida. Escolha 0, 1, 2 ou 3.[/red]")
+                console.print("[red]❌ Opção inválida. Escolha 0, 1, 2, 3 ou 4.[/red]")
         
     except KeyboardInterrupt:
         logger.debug("⚠️ Menu principal interrompido pelo usuário")
@@ -137,100 +143,11 @@ def _show_main_menu() -> bool:
         return False
 
 
-def _wait_for_continue() -> None:
+def _show_quick_stats() -> None:
     """
-    Aguarda o usuário pressionar Enter para continuar
+    Exibe estatísticas rápidas do sistema
     """
-    try:
-        console.print("\n[dim]Pressione Enter para voltar ao menu...[/dim]")
-        input()
-    except KeyboardInterrupt:
-        pass
+    show_statistics()
 
 
-def _show_header() -> None:
-    """
-    Exibe o cabeçalho do aplicativo
-    """
-    header_text = """
-╔══════════════════════════════════════╗
-║            Bridge Setup              ║
-║        DataSnap API Manager          ║
-╚══════════════════════════════════════╝
-    """
-    console.print(header_text, style="bold blue")
-
-
-def _show_separator(title: str = "") -> None:
-    """
-    Exibe um separador visual
-    
-    Args:
-        title: Título opcional para o separador
-    """
-    if title:
-        console.print(f"\n[bold]{title}[/bold]")
-        console.print("─" * len(title))
-    else:
-        console.print("─" * 50)
-
-
-# Funções auxiliares para melhorar a UX
-def show_success_message(message: str) -> None:
-    """
-    Exibe uma mensagem de sucesso formatada
-    
-    Args:
-        message: Mensagem a ser exibida
-    """
-    panel = Panel(
-        f"✅ {message}",
-        border_style="green",
-        padding=(0, 1)
-    )
-    console.print(panel)
-
-
-def show_error_message(message: str) -> None:
-    """
-    Exibe uma mensagem de erro formatada
-    
-    Args:
-        message: Mensagem a ser exibida
-    """
-    panel = Panel(
-        f"❌ {message}",
-        border_style="red",
-        padding=(0, 1)
-    )
-    console.print(panel)
-
-
-def show_warning_message(message: str) -> None:
-    """
-    Exibe uma mensagem de aviso formatada
-    
-    Args:
-        message: Mensagem a ser exibida
-    """
-    panel = Panel(
-        f"⚠️ {message}",
-        border_style="yellow",
-        padding=(0, 1)
-    )
-    console.print(panel)
-
-
-def show_info_message(message: str) -> None:
-    """
-    Exibe uma mensagem informativa formatada
-    
-    Args:
-        message: Mensagem a ser exibida
-    """
-    panel = Panel(
-        f"ℹ️ {message}",
-        border_style="blue",
-        padding=(0, 1)
-    )
-    console.print(panel)
+# Remover as funções duplicadas que agora estão em ui_helpers

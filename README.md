@@ -45,15 +45,21 @@ a fazer
 O Bridge oferece os seguintes comandos CLI:
 
 ### `bridge setup`
-Menu interativo para configurar API Keys e consultar Schemas da DataSnap.
+Menu interativo para configurar API Keys, Fontes de Dados e consultar Schemas da DataSnap.
 
 Este comando abre um menu TUI (Terminal User Interface) que permite:
 - **Cadastrar e validar API Keys** da DataSnap
 - **Listar API Keys cadastradas** (com tokens mascarados para segurança)
+- **Gerenciar Fontes de Dados** (MySQL e PostgreSQL)
+  - Criar novas conexões de banco de dados
+  - Validar conectividade antes de salvar
+  - Listar fontes cadastradas
+  - Cadastrar tabelas de uma fonte específica
+  - Excluir fontes de dados
 - **Consultar Modelos de Dados (Schemas)** da API
 - **Gerenciar configurações** de forma segura
 
-Todos os dados sensíveis são criptografados e armazenados localmente.
+Todos os dados sensíveis são criptografados com AES-GCM e armazenados localmente.
 
 ```bash
 python -m bridge setup
@@ -109,12 +115,33 @@ Por padrão, vamos incluir **checks de idempotência** no roadmap (hash/etag/siz
 **Preciso do PyArrow para começar?**  
 Não. Parquet e row‑count são opcionais (apenas se você quiser validações/transformações).
 
+**Quais bancos de dados são suportados?**  
+Atualmente: **MySQL** e **PostgreSQL**. Mais conectores no roadmap.
+
+**Como funciona a validação de conexão?**  
+O Bridge testa a conectividade executando `SELECT 1` antes de salvar as credenciais.
+
+**Posso selecionar tabelas específicas?**  
+Sim! Após cadastrar uma fonte, use "Cadastrar tabelas" para descobrir e selecionar tabelas específicas.
+
 ---
 
 ## 🔒 Segurança
 
 - Nenhum segredo é commitado. Use `.env` (git‑ignored) ou **store seguro** (ex.: OCI Vault, Secrets Manager).  
 - Logs não imprimem segredos.
+- **Criptografia forte**: Todos os dados sensíveis (API Keys, credenciais de banco) são criptografados com **AES-GCM**.
+- **Chaves derivadas**: Utiliza **Argon2id** para derivação de chaves baseada no `machine-id` do sistema.
+- **Permissões restritivas**: Arquivos `.enc` são criados com permissões `0o600` (apenas proprietário).
+- **Nonces únicos**: Cada operação de criptografia utiliza um nonce aleatório de 12 bytes.
+
+### Arquivos de Configuração
+
+O Bridge armazena dados na pasta `.bridge/` ao lado do executável:
+
+- `.bridge/config.json` - Configurações gerais (não criptografado)
+- `.bridge/api_keys.enc` - API Keys da DataSnap (criptografado)
+- `.bridge/datasources.enc` - Credenciais de fontes de dados (criptografado)
 
 ---
 
