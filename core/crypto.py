@@ -177,6 +177,78 @@ def decrypt_data(encrypted_data: bytes, key: bytes) -> Dict[str, Any]:
         raise ValueError(f"Falha na descriptografia: {e}")
 
 
+def encrypt_data_to_file(data: Dict[str, Any], file_path: str) -> None:
+    """
+    Criptografa dados e salva em arquivo
+    
+    Args:
+        data: Dados para criptografar (serão convertidos para JSON)
+        file_path: Caminho do arquivo onde salvar os dados criptografados
+        
+    Raises:
+        Exception: Se houver erro na criptografia ou salvamento
+    """
+    logger.debug(f"💾 Salvando dados criptografados em {file_path}")
+    try:
+        # Obter chave de criptografia
+        key = get_encryption_key()
+        
+        # Criptografar dados
+        encrypted_data = encrypt_data(data, key)
+        
+        # Garantir que o diretório pai existe
+        from pathlib import Path
+        Path(file_path).parent.mkdir(parents=True, exist_ok=True)
+        
+        # Salvar arquivo
+        with open(file_path, 'wb') as f:
+            f.write(encrypted_data)
+        
+        logger.debug(f"✅ Dados salvos com sucesso em {file_path}")
+        
+    except Exception as e:
+        logger.exception(f"❌ Erro ao salvar dados criptografados: {e}")
+        raise Exception(f"Erro ao salvar dados criptografados: {e}")
+
+
+def decrypt_data_from_file(file_path: str) -> Dict[str, Any]:
+    """
+    Carrega e descriptografa dados de arquivo
+    
+    Args:
+        file_path: Caminho do arquivo com dados criptografados
+        
+    Returns:
+        Dict[str, Any]: Dados descriptografados
+        
+    Raises:
+        FileNotFoundError: Se o arquivo não existir
+        Exception: Se houver erro na descriptografia
+    """
+    logger.debug(f"📂 Carregando dados criptografados de {file_path}")
+    try:
+        # Verificar se arquivo existe
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"Arquivo não encontrado: {file_path}")
+        
+        # Ler arquivo
+        with open(file_path, 'rb') as f:
+            encrypted_data = f.read()
+        
+        # Obter chave de descriptografia
+        key = get_encryption_key()
+        
+        # Descriptografar dados
+        decrypted_data = decrypt_data(encrypted_data, key)
+        
+        logger.debug(f"✅ Dados carregados com sucesso de {file_path}")
+        return decrypted_data
+        
+    except Exception as e:
+        logger.exception(f"❌ Erro ao carregar dados criptografados: {e}")
+        raise Exception(f"Erro ao carregar dados criptografados: {e}")
+
+
 def get_encryption_key() -> bytes:
     """
     Obtém a chave de criptografia derivada do machine-id

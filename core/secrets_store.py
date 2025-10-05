@@ -66,9 +66,10 @@ class SecretsStore:
                 self._loaded = True
                 return
             
-            # Descriptografar e carregar
+            # Descriptografar e carregar usando a nova função
             logger.debug("🔓 Descriptografando arquivo de API Keys")
-            decrypted_data = decrypt_data(api_keys_path)
+            from core.crypto import decrypt_data_from_file
+            decrypted_data = decrypt_data_from_file(api_keys_path)
             
             if not decrypted_data or not isinstance(decrypted_data, dict):
                 logger.warning("⚠️ Dados descriptografados inválidos, inicializando vazio")
@@ -113,7 +114,8 @@ class SecretsStore:
             # Criptografar e salvar
             api_keys_path = get_api_keys_file_path()
             logger.debug(f"🔐 Criptografando dados para {api_keys_path}")
-            encrypt_data(data, api_keys_path)
+            from core.crypto import encrypt_data_to_file
+            encrypt_data_to_file(data, api_keys_path)
             logger.debug("✅ API Keys salvas e criptografadas com sucesso")
             
         except Exception as e:
