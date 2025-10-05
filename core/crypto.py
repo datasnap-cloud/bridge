@@ -14,6 +14,8 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
 from cryptography.hazmat.backends import default_backend
 
+from core.logger import logger
+
 
 def get_machine_id() -> str:
     """
@@ -108,20 +110,26 @@ def encrypt_data(data: Dict[str, Any], key: bytes) -> bytes:
     Returns:
         bytes: nonce (12 bytes) + ciphertext + tag concatenados
     """
+    logger.debug("🔐 Iniciando criptografia de dados")
     # Converter dados para JSON
     json_data = json.dumps(data, ensure_ascii=False).encode('utf-8')
+    logger.debug(f"📄 Dados convertidos para JSON: {len(json_data)} bytes")
     
     # Gerar nonce aleatório (12 bytes para GCM)
     nonce = os.urandom(12)
+    logger.debug("🎲 Nonce aleatório gerado")
     
     # Criar cipher AES-GCM
     aesgcm = AESGCM(key)
     
     # Criptografar (retorna ciphertext + tag concatenados)
     ciphertext_with_tag = aesgcm.encrypt(nonce, json_data, None)
+    logger.debug(f"🔒 Dados criptografados: {len(ciphertext_with_tag)} bytes")
     
     # Concatenar nonce + ciphertext + tag
-    return nonce + ciphertext_with_tag
+    result = nonce + ciphertext_with_tag
+    logger.debug(f"✅ Criptografia concluída: {len(result)} bytes totais")
+    return result
 
 
 def decrypt_data(encrypted_data: bytes, key: bytes) -> Dict[str, Any]:
@@ -138,14 +146,18 @@ def decrypt_data(encrypted_data: bytes, key: bytes) -> Dict[str, Any]:
     Raises:
         ValueError: Se a descriptografia falhar
     """
+    logger.debug(f"🔓 Iniciando descriptografia de {len(encrypted_data)} bytes")
     if len(encrypted_data) < 12:
+        logger.error("❌ Dados criptografados muito pequenos")
         raise ValueError("Dados criptografados muito pequenos")
     
     # Extrair nonce (primeiros 12 bytes)
     nonce = encrypted_data[:12]
+    logger.debug("🎲 Nonce extraído dos dados")
     
     # Extrair ciphertext + tag (resto dos bytes)
     ciphertext_with_tag = encrypted_data[12:]
+    logger.debug(f"📄 Ciphertext extraído: {len(ciphertext_with_tag)} bytes")
     
     # Criar cipher AES-GCM
     aesgcm = AESGCM(key)
@@ -153,11 +165,15 @@ def decrypt_data(encrypted_data: bytes, key: bytes) -> Dict[str, Any]:
     try:
         # Descriptografar
         json_data = aesgcm.decrypt(nonce, ciphertext_with_tag, None)
+        logger.debug(f"🔓 Dados descriptografados: {len(json_data)} bytes")
         
         # Converter de JSON para dict
-        return json.loads(json_data.decode('utf-8'))
+        result = json.loads(json_data.decode('utf-8'))
+        logger.debug("✅ Descriptografia e parsing JSON concluídos")
+        return result
         
     except Exception as e:
+        logger.exception(f"❌ Falha na descriptografia: {e}")
         raise ValueError(f"Falha na descriptografia: {e}")
 
 

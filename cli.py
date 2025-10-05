@@ -6,6 +6,8 @@ CLI principal do DataSnap Bridge
 import typer
 from rich.console import Console
 
+from core.logger import logger
+
 app = typer.Typer(
     name="bridge",
     help="DataSnap Bridge - Ferramenta de linha de comando para DataSnap",
@@ -28,16 +30,23 @@ def setup():
     
     Todos os dados sensíveis são criptografados e armazenados localmente.
     """
+    logger.info("🚀 Iniciando comando setup")
+    
     try:
         from setup.menu import run_setup_menu
+        logger.debug("📋 Carregando menu de setup")
         run_setup_menu()
+        logger.info("✅ Comando setup finalizado com sucesso")
     except KeyboardInterrupt:
+        logger.info("⏹️ Setup interrompido pelo usuário")
         console.print("\n[yellow]👋 Saindo...[/yellow]")
     except ImportError as e:
+        logger.error(f"📦 Erro ao importar módulos: {e}")
         console.print(f"[red]❌ Erro ao importar módulos: {e}[/red]")
         console.print("[dim]Verifique se todas as dependências estão instaladas.[/dim]")
         raise typer.Exit(1)
     except Exception as e:
+        logger.exception(f"💥 Erro inesperado no setup: {e}")
         console.print(f"[red]❌ Erro inesperado: {e}[/red]")
         raise typer.Exit(1)
 

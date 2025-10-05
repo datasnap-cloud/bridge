@@ -12,6 +12,7 @@ from rich.prompt import Prompt, Confirm
 
 from core.secrets_store import secrets_store, APIKey
 from core.http import http_client
+from core.logger import logger
 
 
 console = Console()
@@ -24,6 +25,7 @@ def register_api_key() -> bool:
     Returns:
         bool: True se registrou com sucesso, False caso contrário
     """
+    logger.info("🔑 Iniciando cadastro de API Key")
     console.print("\n[bold blue]📝 Cadastrar API Key[/bold blue]")
     console.print("─" * 50)
     
@@ -35,9 +37,12 @@ def register_api_key() -> bool:
                 console.print("[red]❌ Nome não pode estar vazio[/red]")
                 continue
             
+            logger.debug(f"📝 Nome da API Key informado: {name}")
+            
             # Verificar se já existe
             existing_key = secrets_store.get_key_by_name(name)
             if existing_key:
+                logger.warning(f"⚠️ API Key com nome '{name}' já existe")
                 console.print(f"[red]❌ Já existe uma API Key com o nome '{name}'[/red]")
                 continue
             
@@ -51,27 +56,38 @@ def register_api_key() -> bool:
                 continue
             break
         
+        logger.debug(f"🔑 Token informado: {token[:10]}...")
+        
         # Validar token
         console.print("\n[yellow]🔍 Validando token...[/yellow]")
         
         is_valid, message = http_client.validate_token(token)
         
         if not is_valid:
+            logger.warning(f"❌ Falha na validação do token: {message}")
             console.print(f"[red]❌ {message}[/red]")
             console.print("[dim]Verifique se preencheu corretamente.[/dim]")
+            console.print("\n[dim]Pressione Enter para continuar...[/dim]")
+            input()
             return False
         
         # Salvar token
+        logger.debug("💾 Salvando API Key no secrets store")
         console.print("[yellow]💾 Salvando...[/yellow]")
         secrets_store.add_key(name, token)
         
+        logger.info(f"✅ API Key '{name}' cadastrada com sucesso")
         console.print(f"[green]✅ API Key cadastrada: {name}[/green]")
         return True
         
     except KeyboardInterrupt:
+        logger.info("⚠️ Cadastro de API Key cancelado pelo usuário")
         console.print("\n[yellow]⚠️ Operação cancelada[/yellow]")
         return False
     except Exception as e:
+        logger.exception(f"❌ Erro inesperado durante cadastro de API Key: {e}")
+        console.print(f"[red]❌ Erro inesperado: {e}[/red]")
+        return False
         console.print(f"[red]❌ Erro inesperado: {e}[/red]")
         return False
 
@@ -83,13 +99,16 @@ def list_api_keys() -> bool:
     Returns:
         bool: True se executou com sucesso, False caso contrário
     """
+    logger.info("📋 Listando API Keys cadastradas")
     try:
         keys = secrets_store.list_keys()
         
+        logger.debug(f"📊 Encontradas {len(keys)} API Keys")
         console.print(f"\n[bold blue]🔑 API Keys cadastradas ({len(keys)})[/bold blue]")
         console.print("─" * 60)
         
         if not keys:
+            logger.debug("ℹ️ Nenhuma API Key encontrada")
             console.print("[dim]Nenhuma API Key cadastrada.[/dim]")
             return True
         
@@ -118,14 +137,20 @@ def list_api_keys() -> bool:
         while True:
             choice = Prompt.ask("Escolha uma opção", default="0").strip().upper()
             
+            logger.debug(f"🎯 Opção selecionada: {choice}")
+            
             if choice == "0":
+                logger.debug("↩️ Retornando ao menu principal")
                 return True
             elif choice == "A":
+                logger.debug("🗑️ Iniciando exclusão interativa de API Key")
                 return _delete_api_key_interactive(keys)
             else:
+                logger.warning(f"⚠️ Opção inválida selecionada: {choice}")
                 console.print("[red]❌ Opção inválida[/red]")
         
     except Exception as e:
+        logger.exception(f"❌ Erro ao listar API Keys: {e}")
         console.print(f"[red]❌ Erro ao listar API Keys: {e}[/red]")
         return False
 
@@ -271,21 +296,29 @@ def show_statistics() -> None:
     """
     Exibe estatísticas básicas do sistema
     """
+    logger.info("📊 Exibindo estatísticas do sistema")
     try:
         keys_count = secrets_store.get_keys_count()
         
+        logger.debug(f"📈 Estatísticas: {keys_count} API Keys cadastradas")
         console.print(f"\n[dim]📊 Estatísticas:[/dim]")
         console.print(f"[dim]   • API Keys cadastradas: {keys_count}[/dim]")
         
         # Só testar conectividade se houver chaves cadastradas
         if keys_count > 0:
+            logger.debug("🔍 Testando conectividade com API")
             success, message = http_client.test_connection()
             status_color = "green" if success else "red"
             status_icon = "✅" if success else "❌"
+            logger.debug(f"🌐 Resultado do teste de conectividade: {success} - {message}")
             console.print(f"[dim]   • Conectividade API: [{status_color}]{status_icon} {message}[/{status_color}][/dim]")
         else:
+            logger.debug("⏸️ Pulando teste de conectividade - nenhuma API Key cadastrada")
             console.print(f"[dim]   • Conectividade API: [yellow]⏸️ Cadastre uma API Key primeiro[/yellow][/dim]")
         
-    except Exception:
+    except Exception as e:
+        logger.exception(f"❌ Erro ao exibir estatísticas: {e}")
+        # Ignorar erros de estatísticas
+        pass
         # Ignorar erros de estatísticas
         pass

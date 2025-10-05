@@ -9,6 +9,7 @@ from rich.prompt import Prompt
 from rich.text import Text
 
 from core.secrets_store import secrets_store
+from core.logger import logger
 from setup.actions import register_api_key, list_api_keys, list_schemas, show_statistics
 
 
@@ -19,6 +20,7 @@ def run_setup_menu() -> None:
     """
     Executa o menu principal do setup
     """
+    logger.info("🚀 Iniciando menu de setup do DataSnap Bridge")
     try:
         # Inicializar o sistema
         _initialize_system()
@@ -26,11 +28,14 @@ def run_setup_menu() -> None:
         # Loop principal do menu
         while True:
             if not _show_main_menu():
+                logger.info("👋 Saindo do menu de setup")
                 break
                 
     except KeyboardInterrupt:
+        logger.info("⚠️ Menu de setup interrompido pelo usuário")
         console.print("\n[yellow]👋 Saindo...[/yellow]")
     except Exception as e:
+        logger.exception(f"❌ Erro inesperado no menu de setup: {e}")
         console.print(f"\n[red]❌ Erro inesperado: {e}[/red]")
 
 
@@ -96,12 +101,16 @@ def _show_main_menu() -> bool:
         while True:
             choice = Prompt.ask("\nEscolha uma opção", default="0").strip()
             
+            logger.debug(f"🎯 Opção selecionada no menu principal: {choice}")
+            
             if choice in menu_options:
                 if choice == "0":
+                    logger.debug("🚪 Usuário escolheu sair do menu")
                     return False  # Sair
                 
                 # Executar ação
                 try:
+                    logger.debug(f"🔄 Executando ação do menu: {choice}")
                     result = menu_options[choice]()
                     
                     # Aguardar antes de voltar ao menu
@@ -111,15 +120,19 @@ def _show_main_menu() -> bool:
                     return True  # Continuar no menu
                     
                 except Exception as e:
+                    logger.exception(f"❌ Erro na operação do menu {choice}: {e}")
                     console.print(f"[red]❌ Erro na operação: {e}[/red]")
                     _wait_for_continue()
                     return True
             else:
+                logger.warning(f"⚠️ Opção inválida selecionada: {choice}")
                 console.print("[red]❌ Opção inválida. Escolha 0, 1, 2 ou 3.[/red]")
         
     except KeyboardInterrupt:
+        logger.debug("⚠️ Menu principal interrompido pelo usuário")
         return False
     except Exception as e:
+        logger.exception(f"❌ Erro no menu principal: {e}")
         console.print(f"[red]❌ Erro no menu: {e}[/red]")
         return False
 

@@ -10,6 +10,7 @@ from dataclasses import dataclass, asdict
 
 from core.crypto import encrypt_data, decrypt_data
 from core.paths import get_api_keys_file_path
+from core.logger import logger
 
 
 @dataclass
@@ -55,24 +56,29 @@ class SecretsStore:
         """
         Carrega as API Keys do arquivo criptografado
         """
+        logger.debug("📂 Carregando API Keys do arquivo criptografado")
         try:
             api_keys_path = get_api_keys_file_path()
             
             if not os.path.exists(api_keys_path):
+                logger.debug("📄 Arquivo de API Keys não existe, inicializando vazio")
                 self._keys = []
                 self._loaded = True
                 return
             
             # Descriptografar e carregar
+            logger.debug("🔓 Descriptografando arquivo de API Keys")
             decrypted_data = decrypt_data(api_keys_path)
             
             if not decrypted_data or not isinstance(decrypted_data, dict):
+                logger.warning("⚠️ Dados descriptografados inválidos, inicializando vazio")
                 self._keys = []
                 self._loaded = True
                 return
             
             # Validar estrutura
             if "version" not in decrypted_data or "keys" not in decrypted_data:
+                logger.warning("⚠️ Estrutura de dados inválida, inicializando vazio")
                 self._keys = []
                 self._loaded = True
                 return
@@ -83,10 +89,12 @@ class SecretsStore:
                 if all(field in key_data for field in ["name", "token", "created_at"]):
                     self._keys.append(APIKey(**key_data))
             
+            logger.info(f"✅ {len(self._keys)} API Keys carregadas com sucesso")
             self._loaded = True
             
         except Exception as e:
             # Em caso de erro, inicializar vazio
+            logger.exception(f"❌ Erro ao carregar API Keys: {e}")
             self._keys = []
             self._loaded = True
     
@@ -94,6 +102,7 @@ class SecretsStore:
         """
         Salva as API Keys no arquivo criptografado
         """
+        logger.debug(f"💾 Salvando {len(self._keys)} API Keys no arquivo criptografado")
         try:
             # Preparar dados para salvar
             data = {
@@ -103,9 +112,12 @@ class SecretsStore:
             
             # Criptografar e salvar
             api_keys_path = get_api_keys_file_path()
+            logger.debug(f"🔐 Criptografando dados para {api_keys_path}")
             encrypt_data(data, api_keys_path)
+            logger.debug("✅ API Keys salvas e criptografadas com sucesso")
             
         except Exception as e:
+            logger.exception(f"❌ Erro ao salvar API Keys: {e}")
             raise Exception(f"Erro ao salvar API Keys: {e}")
     
     def add_key(self, name: str, token: str) -> None:
@@ -119,11 +131,13 @@ class SecretsStore:
         Raises:
             ValueError: Se já existe uma key com o mesmo nome
         """
+        logger.debug(f"🔑 Adicionando nova API Key: {name}")
         if not self._loaded:
             self.load()
         
         # Verificar se já existe
         if any(key.name == name for key in self._keys):
+            logger.warning(f"⚠️ Tentativa de adicionar API Key duplicada: {name}")
             raise ValueError(f"Já existe uma API Key com o nome '{name}'")
         
         # Adicionar nova key
@@ -134,7 +148,9 @@ class SecretsStore:
         )
         
         self._keys.append(new_key)
+        logger.debug(f"💾 Salvando API Key {name} no arquivo criptografado")
         self.save()
+        logger.info(f"✅ API Key '{name}' adicionada com sucesso")
     
     def delete_key(self, name: str) -> bool:
         """
@@ -146,6 +162,7 @@ class SecretsStore:
         Returns:
             bool: True se removeu com sucesso, False se não encontrou
         """
+        logger.debug(f"🗑️ Tentando remover API Key: {name}")
         if not self._loaded:
             self.load()
         
@@ -153,9 +170,12 @@ class SecretsStore:
         for i, key in enumerate(self._keys):
             if key.name == name:
                 del self._keys[i]
+                logger.debug(f"💾 Salvando alterações após remoção de {name}")
                 self.save()
+                logger.info(f"✅ API Key '{name}' removida com sucesso")
                 return True
         
+        logger.warning(f"⚠️ API Key '{name}' não encontrada para remoção")
         return False
     
     def list_keys(self) -> List[APIKey]:
