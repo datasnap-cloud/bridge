@@ -38,6 +38,48 @@ a fazer
 a fazer
 ```
 
+---
+
+## 📋 Comandos Disponíveis
+
+O Bridge oferece os seguintes comandos CLI:
+
+### `bridge setup`
+Menu interativo para configurar API Keys e consultar Schemas da DataSnap.
+
+Este comando abre um menu TUI (Terminal User Interface) que permite:
+- **Cadastrar e validar API Keys** da DataSnap
+- **Listar API Keys cadastradas** (com tokens mascarados para segurança)
+- **Consultar Modelos de Dados (Schemas)** da API
+- **Gerenciar configurações** de forma segura
+
+Todos os dados sensíveis são criptografados e armazenados localmente.
+
+```bash
+python -m bridge setup
+```
+
+### `bridge status`
+Exibe o status do sistema e conectividade com a API DataSnap.
+
+Mostra informações sobre:
+- **Número de API Keys cadastradas**
+- **Status da conectividade** com a API DataSnap
+- **Informações do sistema**
+
+```bash
+python -m bridge status
+```
+
+### `bridge version`
+Exibe informações sobre a versão atual do Bridge.
+
+```bash
+python -m bridge version
+```
+
+---
+
 ## 🧪 Exemplos de uso
 
 ### Local → Local (MVP)
