@@ -314,7 +314,7 @@ def _configure_mapping(datasource: Dict[str, Any], table: str, api_key_name: str
         logger.warning(f"Não foi possível detectar chave primária: {e}")
     
     # delete_after_upload
-    delete_after = input("delete_after_upload? [s/N]: ").strip().lower() == 's'
+    delete_after = input("Excluir dados após upload? [s/N]: ").strip().lower() == 's'
     
     # incremental_mode
     print("incremental_mode:")
