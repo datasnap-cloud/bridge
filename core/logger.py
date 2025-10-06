@@ -29,7 +29,8 @@ class BridgeLogger:
     def _setup_logger(self) -> None:
         """Configura o logger baseado na variável de ambiente."""
         # Verifica se debug está ativado
-        debug_enabled = os.getenv('BRIDGE_DEBUG', '').lower() in ('1', 'true', 'yes', 'on')
+        debug_value = os.getenv('BRIDGE_DEBUG', '').lower()
+        debug_enabled = debug_value in ('1', 'true', 'yes', 'on')
         
         # Configura o logger
         self._logger = logging.getLogger('datasnap_bridge')
@@ -39,20 +40,21 @@ class BridgeLogger:
         for handler in self._logger.handlers[:]:
             self._logger.removeHandler(handler)
         
+        # Sempre configura handler para arquivo em .bridge/logs/bridge.log
+        log_file = Path(__file__).parent.parent / '.bridge' / 'logs' / 'bridge.log'
+        log_file.parent.mkdir(parents=True, exist_ok=True)  # Cria o diretório se não existir
+        file_handler = logging.FileHandler(log_file, encoding='utf-8')
+        file_handler.setLevel(logging.DEBUG if debug_enabled else logging.INFO)
+        
+        # Formato detalhado
+        formatter = logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(lineno)d - %(funcName)s() - %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S'
+        )
+        file_handler.setFormatter(formatter)
+        self._logger.addHandler(file_handler)
+        
         if debug_enabled:
-            # Configura handler para arquivo
-            log_file = Path(__file__).parent.parent / 'bridge.log'
-            file_handler = logging.FileHandler(log_file, encoding='utf-8')
-            file_handler.setLevel(logging.DEBUG)
-            
-            # Formato detalhado para debug
-            formatter = logging.Formatter(
-                '%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(lineno)d - %(funcName)s() - %(message)s',
-                datefmt='%Y-%m-%d %H:%M:%S'
-            )
-            file_handler.setFormatter(formatter)
-            self._logger.addHandler(file_handler)
-            
             # Também loga no console em modo debug
             console_handler = logging.StreamHandler()
             console_handler.setLevel(logging.DEBUG)
@@ -63,7 +65,7 @@ class BridgeLogger:
             console_handler.setFormatter(console_formatter)
             self._logger.addHandler(console_handler)
             
-            self._logger.debug("🐛 Debug mode ativado - Logging para arquivo bridge.log")
+            self._logger.debug("🐛 Debug mode ativado - Logging para arquivo .bridge/logs/bridge.log")
         else:
             # Em modo normal, apenas erros críticos no console
             console_handler = logging.StreamHandler()
@@ -71,6 +73,8 @@ class BridgeLogger:
             console_formatter = logging.Formatter('%(levelname)s: %(message)s')
             console_handler.setFormatter(console_formatter)
             self._logger.addHandler(console_handler)
+            
+            self._logger.info("📝 Logging ativado - Salvando logs em .bridge/logs/bridge.log")
     
     def debug(self, message: str, *args, **kwargs) -> None:
         """Log de debug."""

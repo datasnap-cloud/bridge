@@ -12,9 +12,7 @@ import logging
 from urllib.parse import urljoin
 
 from core.paths import get_api_keys_file_path
-
-
-logger = logging.getLogger(__name__)
+from core.logger import logger
 
 
 class DataSnapAPIError(Exception):
@@ -51,21 +49,22 @@ class DataSnapAPI:
     def _load_api_key(self) -> None:
         """Carrega a chave da API do arquivo de configuração."""
         try:
-            # Primeiro tenta carregar do arquivo JSON não criptografado
-            api_keys_path = get_api_keys_file_path().parent / "api_keys.json"
-            if api_keys_path.exists():
-                with open(api_keys_path, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    self._api_key = data.get('api_key')
-                    if self._api_key:
-                        self.session.headers['Authorization'] = f'Bearer {self._api_key}'
-                        return
+            # Usar o secrets_store para carregar as chaves criptografadas
+            from core.secrets_store import secrets_store
             
-            # Se não encontrar, tenta o arquivo criptografado
-            api_keys_path = get_api_keys_file_path()
-            if api_keys_path.exists():
-                # TODO: Implementar descriptografia do arquivo .enc
-                logger.warning("Arquivo de chaves criptografado encontrado, mas descriptografia não implementada")
+            secrets_store.load()
+            keys = secrets_store.list_keys()
+            
+            if keys:
+                # Usar a primeira chave disponível
+                first_key = keys[0]
+                self._api_key = first_key.token
+                self.session.headers['Authorization'] = f'Bearer {self._api_key}'
+                logger.debug(f"API Key carregada: {first_key.name}")
+                return
+            else:
+                logger.warning("Nenhuma API Key encontrada no arquivo criptografado")
+                
         except Exception as e:
             logger.warning(f"Erro ao carregar chave da API: {e}")
     
@@ -84,7 +83,12 @@ class DataSnapAPI:
         Raises:
             DataSnapAPIError: Em caso de erro na API
         """
-        url = urljoin(self.base_url, endpoint.lstrip('/'))
+        # Adiciona prefixo v1/ para todos os endpoints exceto /me, /health e /status
+        endpoint = endpoint.lstrip('/')
+        if not endpoint.startswith(('me', 'health', 'status')):
+            endpoint = f'v1/{endpoint}'
+        
+        url = urljoin(self.base_url, endpoint)
         
         try:
             response = self.session.request(method, url, **kwargs)
@@ -136,14 +140,36 @@ class DataSnapAPI:
         Raises:
             DataSnapAPIError: Em caso de erro na API
         """
-        endpoint = f'/schemas/{schema_slug}/upload-token'
+        endpoint = f'/schemas/{schema_slug}/generate-upload-token'
+        url = urljoin(self.base_url, endpoint)
         data = {
             'mapping_name': mapping_name,
-            'timestamp': int(time.time())
+            'timestamp': int(time.time()),
+            'minutes': 30
         }
         
+        logger.info(f"🔄 Tentativa de obter token de upload")
+        logger.info(f"📍 URL montada: {url}")
+        logger.info(f"📦 Corpo da requisição JSON: {json.dumps(data, indent=2)}")
+        logger.debug(f"📦 Dados da requisição: {data}")
+        
         response = self._make_request('POST', endpoint, json=data)
-        return response.json()
+        
+        # Log da resposta
+        logger.info(f"📊 Status da resposta: {response.status_code}")
+        
+        if response.status_code == 200:
+            response_data = response.json()
+            token = response_data.get('token', '')
+            truncated_token = token[:20] + '...' if len(token) > 20 else token
+            logger.info(f"✅ Token obtido com sucesso (truncado): {truncated_token}")
+            logger.debug(f"📋 Resposta completa: {response_data}")
+            return response_data
+        else:
+            logger.error(f"❌ Falha ao obter token de upload")
+            logger.error(f"📋 Resposta recebida: {response.text}")
+            response.raise_for_status()
+            return response.json()
     
     def upload_file(self, upload_url: str, file_path: Path, 
                    content_type: str = 'application/x-ndjson') -> bool:

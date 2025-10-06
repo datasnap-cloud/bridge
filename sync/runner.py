@@ -419,12 +419,12 @@ class SyncRunner:
                 mapping_name=mapping_name,
                 schema_slug=mapping_name,  # Usando mapping_name como schema_slug por enquanto
                 output_dir=output_dir,
-                compress=True,
+                compress=False,  # Alterado para False para gerar arquivos .jsonl em vez de .gz
                 max_records_per_file=self.config.batch_size,
                 max_file_size=self.config.max_file_size_mb * 1024 * 1024  # Convertendo MB para bytes
             )
             
-            self.logger.debug(f"🔧 Configuração do writer: batch_size={self.config.batch_size}, max_file_size={self.config.max_file_size_mb}MB, compress=True")
+            self.logger.debug(f"🔧 Configuração do writer: batch_size={self.config.batch_size}, max_file_size={self.config.max_file_size_mb}MB, compress=False")
             
             with batch_writer:
                 batch_writer.write_batch(records)
@@ -477,8 +477,17 @@ class SyncRunner:
         self.logger.info(f"📊 Total de dados para upload: {total_size} bytes ({total_size / 1024 / 1024:.2f} MB)")
         
         try:
-            # Obtém schema slug do mapeamento (usando mapping_name por enquanto)
-            schema_slug = mapping_name
+            # Carrega configuração do mapping para obter o schema_slug correto
+            mapping_config = self._load_mapping_config(mapping_name)
+            if not mapping_config:
+                self.logger.error(f"❌ Não foi possível carregar configuração do mapping: {mapping_name}")
+                return False
+                
+            schema_slug = mapping_config.get('schema', {}).get('slug')
+            if not schema_slug:
+                self.logger.error(f"❌ Schema slug não encontrado na configuração do mapping: {mapping_name}")
+                return False
+                
             self.logger.debug(f"🏷️ Schema slug para {mapping_name}: {schema_slug}")
             
             # Cria uploader

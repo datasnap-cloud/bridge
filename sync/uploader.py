@@ -19,9 +19,7 @@ from sync.token_cache import TokenCache
 from sync.jsonl_writer import JSONLFileInfo
 from core.timeutil import get_current_timestamp, format_duration
 from core.paths import BridgePaths
-
-
-logger = logging.getLogger(__name__)
+from core.logger import logger
 
 
 @dataclass
