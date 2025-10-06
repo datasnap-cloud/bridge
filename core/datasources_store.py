@@ -109,10 +109,13 @@ class DataSourcesStore:
         bridge_dir = get_bridge_config_dir()
         return os.path.join(bridge_dir, "datasources.enc")
     
-    def load(self) -> None:
+    def load(self) -> List[DataSource]:
         """
-        Carrega as fontes de dados do arquivo criptografado
+        Carrega as fontes de dados do arquivo criptografado ou retorna lista vazia
         
+        Returns:
+            Lista de datasources carregadas
+            
         Raises:
             Exception: Se houver erro ao carregar
         """
@@ -124,10 +127,16 @@ class DataSourcesStore:
             if not os.path.exists(datasources_path):
                 logger.debug("📄 Arquivo de fontes de dados não existe, iniciando vazio")
                 self.datasources = []
-                return
+                return self.datasources
             
-            # Carregar e descriptografar dados
-            data = decrypt_data_from_file(datasources_path)
+            # Tentar carregar e descriptografar dados
+            try:
+                data = decrypt_data_from_file(datasources_path)
+            except Exception as decrypt_error:
+                logger.warning(f"⚠️ Não foi possível descriptografar datasources: {decrypt_error}")
+                logger.debug("📄 Retornando lista vazia de datasources")
+                self.datasources = []
+                return self.datasources
             
             # Processar dados carregados
             if "sources" in data and isinstance(data["sources"], list):
@@ -171,9 +180,12 @@ class DataSourcesStore:
                 logger.warning("⚠️ Formato de arquivo inválido, iniciando vazio")
                 self.datasources = []
                 
+            return self.datasources
+                
         except Exception as e:
-            logger.exception(f"❌ Erro ao carregar fontes de dados: {e}")
-            self.datasources = []  # Iniciar vazio em caso de erro
+            logger.error(f"❌ Erro ao carregar fontes de dados: {e}")
+            self.datasources = []
+            return self.datasources
     
     def save(self) -> None:
         """

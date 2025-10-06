@@ -16,26 +16,206 @@ Feito para squads que querem começar **em minutos**: CLI pronta, templates de c
 
 ## 🚀 Instalação (dev)
 
+### Pré-requisitos
+- **Python ≥ 3.9**
+- **pip** (gerenciador de pacotes Python)
+- **Acesso à API DataSnap** (API Key necessária)
+
+### Instalação do Ambiente
+
+#### 1. Clone o repositório
 ```bash
-a fazer
+git clone <repository-url>
+cd datasnap-bridge
 ```
 
-Requisitos: Python ≥ 3.9.
+#### 2. Crie um ambiente virtual
+```bash
+python -m venv venv
+
+# Linux/macOS
+source venv/bin/activate
+
+# Windows
+venv\Scripts\activate
+```
+
+#### 3. Instale as dependências
+```bash
+pip install -r requirements.txt
+```
+
+#### 4. Configuração inicial
+```bash
+# Execute o setup interativo
+python -m bridge setup
+
+# Ou verifique o status
+python -m bridge status
+```
+
+### Dependências Principais
+
+O Bridge utiliza as seguintes bibliotecas principais:
+- **`cryptography`** - Criptografia AES-GCM para dados sensíveis
+- **`requests`** - Cliente HTTP para comunicação com API DataSnap
+- **`psycopg2-binary`** - Conector PostgreSQL
+- **`PyMySQL`** - Conector MySQL
+- **`rich`** - Interface de terminal rica e colorida
+- **`asyncio`** - Processamento assíncrono para performance
+
+### Estrutura do Projeto
+
+```
+datasnap-bridge/
+├── bridge/                 # Módulo principal
+│   ├── __main__.py        # Entry point CLI
+│   └── cli.py             # Comandos CLI
+├── core/                  # Funcionalidades core
+│   ├── crypto.py          # Criptografia e segurança
+│   ├── datasources_store.py # Gerenciamento de fontes
+│   ├── http.py            # Cliente HTTP
+│   ├── paths.py           # Gerenciamento de caminhos
+│   └── secrets_store.py   # Armazenamento seguro
+├── setup/                 # Interface de configuração
+│   ├── menu.py            # Menu principal TUI
+│   └── validators.py      # Validadores de entrada
+├── sync/                  # Motor de sincronização
+│   ├── runner.py          # Orquestrador principal
+│   ├── extractor.py       # Extração de dados
+│   ├── uploader.py        # Upload para DataSnap
+│   └── metrics.py         # Coleta de métricas
+├── tests/                 # Testes automatizados
+└── .bridge/              # Dados de configuração
+    ├── config/           # Configurações gerais
+    ├── state/            # Estado das sincronizações
+    └── logs/             # Logs de execução
+```
 
 ---
 
 ## 🏁 Começo rápido
 
+### 1. Configuração Inicial
 ```bash
-a fazer
+# Execute o menu de configuração
+python -m bridge setup
+
+# Siga os passos:
+# 1. Cadastre sua API Key da DataSnap
+# 2. Configure suas fontes de dados (MySQL/PostgreSQL)
+# 3. Valide as conexões
+```
+
+### 2. Primeira Sincronização
+```bash
+# Verifique o status do sistema
+python -m bridge status
+
+# Execute uma sincronização de teste
+python -m bridge sync --dry-run
+
+# Execute sincronização real
+python -m bridge sync
+```
+
+### 3. Monitoramento
+```bash
+# Acompanhe os logs em tempo real
+tail -f .bridge/logs/sync.log
+
+# Verifique o estado das sincronizações
+cat .bridge/state/sync_state.json
 ```
 
 ---
 
 ## 🔧 Configuração
 
+### Configuração de API Keys
+
+As API Keys da DataSnap são armazenadas de forma criptografada em `.bridge/api_keys.enc`:
+
 ```bash
-a fazer
+# Adicionar nova API Key via menu
+python -m bridge setup
+# Selecione: "Gerenciar API Keys" > "Cadastrar nova API Key"
+
+# Listar API Keys cadastradas
+python -m bridge setup
+# Selecione: "Gerenciar API Keys" > "Listar API Keys"
+```
+
+### Configuração de Fontes de Dados
+
+#### MySQL
+```json
+{
+  "name": "mysql-prod",
+  "type": "mysql",
+  "connection": {
+    "host": "localhost",
+    "port": 3306,
+    "database": "production",
+    "username": "bridge_user",
+    "password": "secure_password"
+  }
+}
+```
+
+#### PostgreSQL
+```json
+{
+  "name": "postgres-analytics",
+  "type": "postgresql", 
+  "connection": {
+    "host": "analytics.company.com",
+    "port": 5432,
+    "database": "analytics",
+    "username": "readonly_user",
+    "password": "readonly_pass"
+  }
+}
+```
+
+### Configuração de Mapeamentos
+
+Os mapeamentos definem como os dados são extraídos e enviados para a DataSnap:
+
+```json
+{
+  "version": "1.0",
+  "source": {
+    "connection_ref": "mysql-prod",
+    "table": "user_events",
+    "schema": "analytics"
+  },
+  "table": "user_events",
+  "schema": "production",
+  "schema_slug": "prod.user_events",
+  "transfer": {
+    "batch_size": 10000,
+    "max_file_size_mb": 100,
+    "retry_attempts": 3
+  },
+  "query": "SELECT * FROM user_events WHERE created_at > '2024-01-01'"
+}
+```
+
+### Variáveis de Ambiente
+
+```bash
+# Nível de log (DEBUG, INFO, WARNING, ERROR)
+export BRIDGE_LOG_LEVEL=INFO
+
+# Diretório de configuração customizado
+export BRIDGE_CONFIG_DIR=/custom/path/.bridge
+
+# Timeout para operações HTTP (segundos)
+export BRIDGE_HTTP_TIMEOUT=30
+
+# Modo dry-run global
+export BRIDGE_DRY_RUN=true
 ```
 
 ---
@@ -43,6 +223,68 @@ a fazer
 ## 📋 Comandos Disponíveis
 
 O Bridge oferece os seguintes comandos CLI:
+
+### `bridge sync`
+Executa a sincronização de dados de acordo com os mapeamentos configurados.
+
+Este comando realiza a extração, transformação e carregamento (ETL) de dados das fontes configuradas para a DataSnap:
+- **Extrai dados** das fontes de dados configuradas (MySQL, PostgreSQL)
+- **Processa e valida** os dados de acordo com os mapeamentos
+- **Carrega os dados** na plataforma DataSnap
+- **Monitora métricas** e estado da sincronização
+- **Suporte a execução paralela** para múltiplos mapeamentos
+
+#### Opções disponíveis:
+```bash
+# Sincronizar um mapeamento específico
+python -m bridge sync mapping_name
+
+# Sincronizar múltiplos mapeamentos
+python -m bridge sync mapping1 mapping2 mapping3
+
+# Sincronizar todos os mapeamentos disponíveis
+python -m bridge sync --all
+
+# Execução em modo dry-run (sem upload)
+python -m bridge sync --dry-run mapping_name
+
+# Forçar sincronização completa (ignorar estado anterior)
+python -m bridge sync --force mapping_name
+
+# Execução sequencial (não paralela)
+python -m bridge sync --no-parallel mapping1 mapping2
+```
+
+#### Configuração de Mapeamentos
+Os mapeamentos são definidos em arquivos JSON na pasta `.bridge/config/mappings/`:
+
+```json
+{
+  "version": "1.0",
+  "source": {
+    "connection_ref": "local",
+    "table": "tenant_logs",
+    "schema": "datasnap"
+  },
+  "table": "tenant_logs",
+  "schema": "local",
+  "schema_slug": "local.tenant_logs",
+  "transfer": {
+    "batch_size": 10000,
+    "max_file_size_mb": 100
+  }
+}
+```
+
+#### Monitoramento e Logs
+- **Estado da sincronização** é salvo em `.bridge/state/sync_state.json`
+- **Métricas detalhadas** são coletadas durante a execução
+- **Logs estruturados** com níveis DEBUG, INFO, WARNING, ERROR
+- **Suporte a retry automático** em caso de falhas temporárias
+
+```bash
+python -m bridge sync
+```
 
 ### `bridge setup`
 Menu interativo para configurar API Keys, Fontes de Dados e consultar Schemas da DataSnap.
@@ -82,6 +324,109 @@ Exibe informações sobre a versão atual do Bridge.
 
 ```bash
 python -m bridge version
+```
+
+---
+
+## ⏰ Agendamento Automático (Cron Job)
+
+Para executar sincronizações automaticamente em intervalos regulares, você pode configurar um cron job no sistema.
+
+### Configuração do Cron Job
+
+#### 1. Editar o crontab
+```bash
+crontab -e
+```
+
+#### 2. Adicionar a linha de agendamento
+```bash
+# Executar sincronização a cada 5 minutos
+*/5 * * * * /usr/bin/env bash -lc 'cd /opt/datasnap-bridge && venv/bin/bridge sync >> .bridge/logs/sync.log 2>&1'
+
+# Executar sincronização diariamente às 02:00
+0 2 * * * /usr/bin/env bash -lc 'cd /opt/datasnap-bridge && venv/bin/bridge sync --all >> .bridge/logs/sync.log 2>&1'
+
+# Executar sincronização a cada hora
+0 * * * * /usr/bin/env bash -lc 'cd /opt/datasnap-bridge && venv/bin/bridge sync >> .bridge/logs/sync.log 2>&1'
+```
+
+#### 3. Explicação dos componentes:
+- **`*/5 * * * *`** - A cada 5 minutos
+- **`/usr/bin/env bash -lc`** - Executa bash com perfil completo carregado
+- **`cd /opt/datasnap-bridge`** - Navega para o diretório do Bridge
+- **`venv/bin/bridge sync`** - Executa o comando de sincronização
+- **`>> .bridge/logs/sync.log 2>&1`** - Redireciona logs para arquivo
+
+### Configurações Recomendadas
+
+#### Para ambientes de produção:
+```bash
+# Sincronização incremental a cada 15 minutos
+*/15 * * * * /usr/bin/env bash -lc 'cd /opt/datasnap-bridge && venv/bin/bridge sync >> .bridge/logs/sync.log 2>&1'
+
+# Sincronização completa diária (com --force)
+0 3 * * * /usr/bin/env bash -lc 'cd /opt/datasnap-bridge && venv/bin/bridge sync --all --force >> .bridge/logs/sync-full.log 2>&1'
+```
+
+#### Para ambientes de desenvolvimento:
+```bash
+# Sincronização a cada hora durante horário comercial
+0 9-18 * * 1-5 /usr/bin/env bash -lc 'cd /opt/datasnap-bridge && venv/bin/bridge sync >> .bridge/logs/sync.log 2>&1'
+```
+
+### Monitoramento dos Logs
+
+#### Visualizar logs em tempo real:
+```bash
+tail -f .bridge/logs/sync.log
+```
+
+#### Verificar últimas execuções:
+```bash
+tail -n 100 .bridge/logs/sync.log
+```
+
+#### Rotação de logs (logrotate):
+Crie o arquivo `/etc/logrotate.d/datasnap-bridge`:
+```
+/opt/datasnap-bridge/.bridge/logs/*.log {
+    daily
+    rotate 30
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 644 bridge bridge
+}
+```
+
+### Variáveis de Ambiente
+
+Para configurações específicas no cron, você pode definir variáveis de ambiente:
+
+```bash
+# No início do crontab
+BRIDGE_LOG_LEVEL=INFO
+BRIDGE_CONFIG_DIR=/opt/datasnap-bridge/.bridge
+
+# Cron job com configurações específicas
+*/5 * * * * /usr/bin/env bash -lc 'export BRIDGE_LOG_LEVEL=DEBUG && cd /opt/datasnap-bridge && venv/bin/bridge sync >> .bridge/logs/sync.log 2>&1'
+```
+
+### Verificação do Status
+
+Para verificar se o cron job está funcionando:
+
+```bash
+# Verificar se o cron está rodando
+sudo systemctl status cron
+
+# Verificar logs do cron
+sudo tail -f /var/log/cron
+
+# Listar cron jobs ativos
+crontab -l
 ```
 
 ---
