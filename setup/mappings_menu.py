@@ -281,7 +281,7 @@ def _select_schema(api_key: str) -> Optional[Dict[str, Any]]:
                     
                     if 0 <= idx < min(items_per_page, len(schemas) - start_idx) and real_idx < len(schemas):
                         selected_schema = schemas[real_idx]
-                        show_success_message(f"Schema selecionado: {selected_schema.get('name', 'Sem nome')} (ID: {selected_schema.get('id', 'N/A')})")
+                        show_success_message(f"Schema selecionado: {selected_schema.get('name', 'Sem nome')} (Slug: {selected_schema.get('slug', 'N/A')}, ID: {selected_schema.get('id', 'N/A')})")
                         return selected_schema
                     else:
                         show_error_message("Número inválido. Escolha um número da lista.")
@@ -296,7 +296,8 @@ def _select_schema(api_key: str) -> Optional[Dict[str, Any]]:
 
 def _configure_mapping(datasource: Dict[str, Any], table: str, api_key_name: str, schema: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """Configura as opções do mapeamento"""
-    print(f"\nConfiguração do vínculo para {datasource['name']}.{table} → schema \"{schema.get('name', 'N/A')} ({schema.get('id', 'N/A')})\"")
+    print(f"\nConfiguração do vínculo para {datasource['name']}.{table} → schema \"{schema.get('name', 'N/A')} ({schema.get('slug', 'N/A')})\"")
+    print(f"Schema ID: {schema.get('id', 'N/A')} | Slug: {schema.get('slug', 'N/A')}")
     
     # Detectar chave primária automaticamente
     detected_pk = None
@@ -369,6 +370,7 @@ def _configure_mapping(datasource: Dict[str, Any], table: str, api_key_name: str
         "schema": {
             "id": schema.get('id'),
             "name": schema.get('name'),
+            "slug": schema.get('slug'),
             "token_ref": api_key_name
         },
         "transfer": {

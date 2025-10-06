@@ -14,6 +14,7 @@ from core.logger import logger
 from setup.actions import register_api_key, list_api_keys, list_schemas, show_statistics
 from setup.datasources_menu import run_datasources_menu
 from setup.mappings_menu import run_mappings_menu
+from setup.mappings_manager import run_mappings_manager
 
 
 from setup.ui_helpers import (
@@ -88,12 +89,13 @@ def _show_main_menu() -> bool:
         console.print("  [cyan]2.[/cyan] Listar Modelos de Dados (Schemas)")
         console.print("  [cyan]3.[/cyan] Fontes de Dados")
         console.print("  [cyan]4.[/cyan] Vincular Tabelas → Schemas")
+        console.print("  [cyan]5.[/cyan] Gerenciar Vinculações")
         console.print("  [cyan]0.[/cyan] Sair")
         
         # Obter escolha do usuário
         choice = Prompt.ask(
             "\n🎯 Escolha uma opção",
-            choices=["0", "1", "2", "3", "4"],
+            choices=["0", "1", "2", "3", "4", "5"],
             default="0"
         )
         
@@ -103,6 +105,7 @@ def _show_main_menu() -> bool:
             "2": list_schemas,
             "3": run_datasources_menu,
             "4": run_mappings_menu,
+            "5": run_mappings_manager,
             "0": lambda: False  # Sair
         }
         
@@ -133,7 +136,7 @@ def _show_main_menu() -> bool:
                     return True
             else:
                 logger.warning(f"⚠️ Opção inválida selecionada: {choice}")
-                console.print("[red]❌ Opção inválida. Escolha 0, 1, 2, 3 ou 4.[/red]")
+                console.print("[red]❌ Opção inválida. Escolha 0, 1, 2, 3, 4 ou 5.[/red]")
         
     except KeyboardInterrupt:
         logger.debug("⚠️ Menu principal interrompido pelo usuário")

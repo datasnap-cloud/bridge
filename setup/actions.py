@@ -378,6 +378,38 @@ def _show_data_flow() -> None:
         
         console.print(f"\n[bold cyan]🔄 Fluxo de Dados:[/bold cyan]")
         
+        # Cache de schemas para evitar múltiplas requisições
+        schemas_cache = {}
+        
+        def get_schema_info(schema_id):
+            """Obtém informações do schema (slug) via API"""
+            if schema_id in schemas_cache:
+                return schemas_cache[schema_id]
+            
+            try:
+                # Tentar obter uma API key válida
+                api_keys = secrets_store.get_api_keys()
+                if not api_keys:
+                    return None
+                
+                # Usar a primeira API key disponível
+                api_key = api_keys[0]
+                success, data = http_client.get_schemas(api_key.token)
+                
+                if success and 'data' in data:
+                    for schema in data['data']:
+                        if str(schema.get('id')) == str(schema_id):
+                            schema_info = {
+                                'slug': schema.get('slug', 'N/A'),
+                                'name': schema.get('name', 'Desconhecido')
+                            }
+                            schemas_cache[schema_id] = schema_info
+                            return schema_info
+                
+                return None
+            except Exception:
+                return None
+        
         # Agrupar mapeamentos por fonte de dados
         mappings_by_source = {}
         
@@ -387,17 +419,30 @@ def _show_data_flow() -> None:
                     mapping_data = json.load(f)
                 
                 source_name = mapping_data.get('source', {}).get('name', 'Desconhecido')
+                source_type = mapping_data.get('source', {}).get('type', 'Desconhecido')
                 table_name = mapping_data.get('table', 'Desconhecida')
                 schema_name = mapping_data.get('schema', {}).get('name', 'Desconhecido')
                 schema_id = mapping_data.get('schema', {}).get('id', 'N/A')
                 
-                if source_name not in mappings_by_source:
-                    mappings_by_source[source_name] = []
+                # Priorizar slug salva no arquivo de mapeamento
+                schema_slug = mapping_data.get('schema', {}).get('slug')
                 
-                mappings_by_source[source_name].append({
+                # Se não tiver slug no arquivo, tentar obter via API
+                if not schema_slug:
+                    schema_info = get_schema_info(schema_id)
+                    schema_slug = schema_info.get('slug', 'N/A') if schema_info else 'N/A'
+                
+                if source_name not in mappings_by_source:
+                    mappings_by_source[source_name] = {
+                        'type': source_type,
+                        'mappings': []
+                    }
+                
+                mappings_by_source[source_name]['mappings'].append({
                     'table': table_name,
                     'schema_name': schema_name,
-                    'schema_id': schema_id
+                    'schema_id': schema_id,
+                    'schema_slug': schema_slug
                 })
                 
             except Exception as e:
@@ -405,15 +450,17 @@ def _show_data_flow() -> None:
                 continue
         
         # Exibir fluxo visual para cada fonte de dados
-        for source_name, mappings in mappings_by_source.items():
-            console.print(f"\n[yellow]📊 Fonte:[/yellow] [bold]{source_name}[/bold]")
+        for source_name, source_data in mappings_by_source.items():
+            source_type = source_data['type'].upper()
+            console.print(f"\n[yellow]📊 Fonte:[/yellow] [bold]{source_name}[/bold] [dim]({source_type})[/dim]")
             
-            for mapping in mappings:
-                # Desenhar fluxo visual
-                console.print(f"   [cyan]├─[/cyan] [white]{mapping['table']}[/white] [dim]→[/dim] [green]{mapping['schema_name']}[/green] [dim](ID: {mapping['schema_id']})[/dim]")
+            for mapping in source_data['mappings']:
+                # Desenhar fluxo visual com slug
+                schema_display = f"{mapping['schema_name']} [dim](ID: {mapping['schema_id']}, Slug: {mapping['schema_slug']})[/dim]"
+                console.print(f"   [cyan]├─[/cyan] [white]{mapping['table']}[/white] [dim]→[/dim] [green]{schema_display}[/green]")
         
         # Resumo
-        total_mappings = sum(len(mappings) for mappings in mappings_by_source.values())
+        total_mappings = sum(len(source_data['mappings']) for source_data in mappings_by_source.values())
         console.print(f"\n[dim]   • Total de vínculos: {total_mappings}[/dim]")
         console.print(f"[dim]   • Fontes vinculadas: {len(mappings_by_source)}[/dim]")
         
