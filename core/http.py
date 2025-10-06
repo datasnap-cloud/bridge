@@ -77,51 +77,45 @@ class DataSnapHTTPClient:
     
     def _create_session(self) -> requests.Session:
         """
-        Cria uma sessão HTTP configurada com retries e timeouts
+        Cria uma sessão HTTP configurada com retries e timeouts otimizados
         
         Returns:
             requests.Session: Sessão configurada
         """
         session = requests.Session()
         
-        # Configurar headers padrão
+        # Configurar headers padrão otimizados
         session.headers.update({
-            'User-Agent': 'BridgeSetup/0.1 (+datasnap)',
+            'User-Agent': 'insomnia/11.1.0',  # User-Agent que funciona bem
             'Content-Type': 'application/json',
-            'Accept': 'application/json'
+            'Accept': 'application/json',
+            'Connection': 'keep-alive',  # Reutilizar conexões
+            'Accept-Encoding': 'gzip, deflate'  # Compressão
         })
         
-        # Configurar estratégia de retry
+        # Configurar estratégia de retry mais agressiva
         retry_strategy = Retry(
-            total=3,  # 3 tentativas
-            backoff_factor=1,  # Backoff exponencial: 1s, 2s, 4s
+            total=1,  # Apenas 1 retry para ser mais rápido
+            backoff_factor=0.1,  # Backoff mínimo: 0.1s
             status_forcelist=[429, 500, 502, 503, 504],  # Status codes para retry
             allowed_methods=["HEAD", "GET", "OPTIONS", "POST", "PUT", "DELETE"]
         )
         
         # Aplicar adapter com retry para HTTP e HTTPS
-        adapter = HTTPAdapter(max_retries=retry_strategy)
+        adapter = HTTPAdapter(
+            max_retries=retry_strategy,
+            pool_connections=10,  # Pool de conexões
+            pool_maxsize=10,      # Máximo de conexões no pool
+            pool_block=False      # Não bloquear se pool estiver cheio
+        )
         session.mount("http://", adapter)
         session.mount("https://", adapter)
         
-        # Configurar SSL - fallback para Windows
-        try:
-            import certifi
-            # Testar se certifi funciona com um site simples
-            test_session = requests.Session()
-            test_session.verify = certifi.where()
-            test_response = test_session.get('https://httpbin.org/get', timeout=3)
-            
-            # Se chegou aqui, certifi funciona
-            session.verify = certifi.where()
-            logger.debug("🔒 SSL: Usando certificados do certifi")
-        except Exception as e:
-            # Fallback: desabilitar verificação SSL com aviso
-            session.verify = False
-            logger.warning(f"⚠️  SSL: Verificação desabilitada devido a problemas de certificado: {e}")
-            # Suprimir warnings de SSL
-            import urllib3
-            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        # Configurar SSL de forma mais simples e rápida
+        session.verify = False  # Desabilitar SSL para máxima performance
+        # Suprimir warnings de SSL
+        import urllib3
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
         
         return session
     
@@ -155,7 +149,9 @@ class DataSnapHTTPClient:
         headers = {
             'User-Agent': 'insomnia/11.1.0',  # Usar o mesmo User-Agent que funciona
             'Content-Type': 'application/json',
-            'Accept': 'application/json'
+            'Accept': 'application/json',
+            'Connection': 'keep-alive',
+            'Accept-Encoding': 'gzip, deflate'
         }
         
         if token:
@@ -174,8 +170,8 @@ class DataSnapHTTPClient:
         if token:
             logger.debug(f"🔑 Token presente: {token[:10]}...")
         
-        # Configurar timeouts
-        timeout = (10, 20)  # (connect_timeout, read_timeout)
+        # Configurar timeouts mais agressivos
+        timeout = (3, 10)  # (connect_timeout, read_timeout) - mais rápido
         
         try:
             start_time = time.time()
@@ -185,8 +181,8 @@ class DataSnapHTTPClient:
                 headers=headers,
                 json=data,
                 params=params,
-                timeout=timeout
-                # verify é configurado na sessão
+                timeout=timeout,
+                stream=False  # Não usar streaming para ser mais rápido
             )
             elapsed_time = time.time() - start_time
             
@@ -207,84 +203,6 @@ class DataSnapHTTPClient:
             logger.error("⏰ Timeout na requisição HTTP")
             logger.error(f"🔧 Comando curl que falhou:\n{curl_command}")
             raise requests.RequestException("Timeout na requisição")
-        except requests.exceptions.SSLError as e:
-            logger.warning(f"🔒 Erro SSL detectado: {e}")
-            logger.warning("🔄 Tentando novamente sem verificação SSL...")
-            
-            # Recriar sessão sem SSL
-            self.session.verify = False
-            import urllib3
-            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-            
-            try:
-                response = self.session.request(
-                    method=method,
-                    url=url,
-                    headers=headers,
-                    json=data,
-                    params=params,
-                    timeout=timeout
-                )
-                elapsed_time = time.time() - start_time
-                
-                logger.debug(f"⏱️ Requisição completada em {elapsed_time:.2f}s - Status: {response.status_code}")
-                
-                # Tentar parsear JSON da resposta
-                try:
-                    response_data = response.json()
-                    logger.debug(f"📥 Response data: {json.dumps(response_data, indent=2)}")
-                except (json.JSONDecodeError, ValueError):
-                    # Se não for JSON válido, usar texto da resposta
-                    response_data = {"message": response.text or "Resposta vazia"}
-                    logger.debug(f"📥 Response text: {response.text}")
-                
-                return response.status_code, response_data
-                
-            except Exception as retry_e:
-                logger.error(f"❌ Falha mesmo sem SSL: {retry_e}")
-                raise requests.RequestException(f"Erro SSL e falha no retry: {retry_e}")
-        except requests.exceptions.ConnectionError as e:
-            # Verificar se é um erro SSL mascarado como ConnectionError
-            if "CERTIFICATE_VERIFY_FAILED" in str(e) or "certificate verify failed" in str(e).lower():
-                logger.warning(f"🔒 Erro SSL mascarado como ConnectionError: {e}")
-                logger.warning("🔄 Tentando novamente sem verificação SSL...")
-                
-                # Recriar sessão sem SSL
-                self.session.verify = False
-                import urllib3
-                urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-                
-                try:
-                    response = self.session.request(
-                        method=method,
-                        url=url,
-                        headers=headers,
-                        json=data,
-                        params=params,
-                        timeout=timeout
-                    )
-                    elapsed_time = time.time() - start_time
-                    
-                    logger.debug(f"⏱️ Requisição completada em {elapsed_time:.2f}s - Status: {response.status_code}")
-                    
-                    # Tentar parsear JSON da resposta
-                    try:
-                        response_data = response.json()
-                        logger.debug(f"📥 Response data: {json.dumps(response_data, indent=2)}")
-                    except (json.JSONDecodeError, ValueError):
-                        # Se não for JSON válido, usar texto da resposta
-                        response_data = {"message": response.text or "Resposta vazia"}
-                        logger.debug(f"📥 Response text: {response.text}")
-                    
-                    return response.status_code, response_data
-                    
-                except Exception as retry_e:
-                    logger.error(f"❌ Falha mesmo sem SSL: {retry_e}")
-                    raise requests.RequestException(f"Erro SSL e falha no retry: {retry_e}")
-            else:
-                logger.error("🔌 Erro de conexão HTTP")
-                logger.error(f"🔧 Comando curl que falhou:\n{curl_command}")
-                raise requests.RequestException("Erro de conexão")
         except requests.exceptions.RequestException as e:
             logger.error(f"❌ Erro na requisição HTTP: {e}")
             logger.error(f"🔧 Comando curl que falhou:\n{curl_command}")
