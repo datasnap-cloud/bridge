@@ -13,6 +13,7 @@ from core.datasources_store import datasources_store
 from core.logger import logger
 from setup.actions import register_api_key, list_api_keys, list_schemas, show_statistics
 from setup.datasources_menu import run_datasources_menu
+from setup.mappings_menu import run_mappings_menu
 
 
 from setup.ui_helpers import (
@@ -86,12 +87,13 @@ def _show_main_menu() -> bool:
         console.print("  [cyan]1.[/cyan] Cadastrar/Listar API Keys")
         console.print("  [cyan]2.[/cyan] Listar Modelos de Dados (Schemas)")
         console.print("  [cyan]3.[/cyan] Fontes de Dados")
+        console.print("  [cyan]4.[/cyan] Vincular Tabelas → Schemas")
         console.print("  [cyan]0.[/cyan] Sair")
         
         # Obter escolha do usuário
         choice = Prompt.ask(
             "\n🎯 Escolha uma opção",
-            choices=["0", "1", "2", "3"],
+            choices=["0", "1", "2", "3", "4"],
             default="0"
         )
         
@@ -100,6 +102,7 @@ def _show_main_menu() -> bool:
             "1": register_api_key,
             "2": list_schemas,
             "3": run_datasources_menu,
+            "4": run_mappings_menu,
             "0": lambda: False  # Sair
         }
         

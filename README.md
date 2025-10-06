@@ -100,10 +100,101 @@ a fazer
 
 ---
 
+## 🧪 Testes Automatizados
+
+O Bridge possui uma suíte abrangente de testes automatizados para garantir a qualidade e confiabilidade do código.
+
+### Executando os Testes
+
+#### Testes Unitários (pytest)
+```bash
+# Executar todos os testes unitários
+python -m pytest tests/
+
+# Executar testes com cobertura
+python -m pytest tests/ --cov=core --cov=setup
+
+# Executar um teste específico
+python -m pytest tests/test_crypto.py
+```
+
+#### Testes de Integração e Funcionais
+```bash
+# Teste completo do fluxo principal
+python test_full_flow.py
+
+# Teste das estatísticas otimizadas
+python test_statistics.py
+python test_menu_statistics.py
+
+# Teste de paginação de schemas
+python test_schema_pagination.py
+
+# Teste de vinculação de tabelas
+python test_option4.py
+python test_option4_interactive.py
+python test_with_tables.py
+
+# Teste de fontes de dados
+python test_datasources.py
+```
+
+#### Demos Interativos
+```bash
+# Demo de paginação de schemas
+python demo_schema_pagination.py
+
+# Demo de estatísticas otimizadas
+python demo_statistics.py
+```
+
+### Estrutura dos Testes
+
+#### Testes Unitários (`tests/`)
+- **`test_crypto.py`** - Testes de criptografia AES-GCM e derivação de chaves
+- **`test_database_validators.py`** - Validação de conexões MySQL e PostgreSQL
+- **`test_datasources_store.py`** - Gerenciamento de fontes de dados
+- **`test_http.py`** - Cliente HTTP e comunicação com API
+- **`test_paths.py`** - Gerenciamento de caminhos e diretórios
+- **`test_secrets_store.py`** - Armazenamento seguro de credenciais
+
+#### Testes Funcionais (raiz do projeto)
+- **`test_full_flow.py`** - Teste completo do fluxo de configuração
+- **`test_statistics.py`** - Estatísticas otimizadas sem validação de API
+- **`test_menu_statistics.py`** - Menu principal com estatísticas
+- **`test_schema_pagination.py`** - Paginação na listagem de schemas
+- **`test_option4*.py`** - Vinculação de tabelas com schemas
+- **`test_datasources.py`** - Gerenciamento de fontes de dados
+- **`test_with_tables.py`** - Fluxo com tabelas simuladas
+
+#### Demos e Exemplos
+- **`demo_schema_pagination.py`** - Demonstração interativa da paginação
+- **`demo_statistics.py`** - Demonstração das estatísticas otimizadas
+
+### Cobertura de Testes
+
+Os testes cobrem:
+- ✅ **Criptografia e segurança** - AES-GCM, Argon2id, nonces únicos
+- ✅ **Conectividade de banco** - MySQL, PostgreSQL, validação de credenciais
+- ✅ **API DataSnap** - Autenticação, listagem de schemas, tratamento de erros
+- ✅ **Interface de usuário** - Menus, paginação, entrada do usuário
+- ✅ **Armazenamento de dados** - Fontes de dados, API keys, cache de schemas
+- ✅ **Fluxos completos** - Configuração end-to-end, vinculação de tabelas
+
+### Executando Testes em CI/CD
+
+```bash
+# Script para CI/CD
+python -m pytest tests/ --cov=core --cov=setup --cov-report=xml --cov-report=html
+```
+
+---
+
 ## 🤝 Contribuindo
 
 - Abra issues com **casos reais de migração** (tamanho, origem/destino, volume de arquivos).
 - Pull requests bem-vindos — mantenha estilo dos módulos existentes e cobertura básica de testes.
+- **Sempre adicione testes** para novas funcionalidades ou correções de bugs.
 
 ---
 

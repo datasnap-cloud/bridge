@@ -269,17 +269,33 @@ def _fetch_and_display_schemas(api_key: APIKey) -> bool:
             console.print(f"[red]❌ {data}[/red]")
             return True
         
-        # Exibir JSON formatado e colorido
-        json_str = json.dumps(data, indent=2, ensure_ascii=False)
-        syntax = Syntax(json_str, "json", theme="monokai", line_numbers=True)
+        # Verificar se a resposta tem o formato esperado
+        if 'data' not in data:
+            console.print("[red]❌ Formato de resposta inválido - 'data' não encontrado[/red]")
+            return True
         
-        panel = Panel(
-            syntax,
-            title="[bold green]Schemas DataSnap[/bold green]",
-            border_style="green"
-        )
+        schemas = data['data']
         
-        console.print(panel)
+        if not schemas:
+            console.print("[yellow]⚠️ Nenhum schema encontrado[/yellow]")
+            return True
+        
+        # Criar tabela formatada
+        table = Table(title="[bold green]Schemas DataSnap[/bold green]")
+        table.add_column("ID", style="cyan", no_wrap=True)
+        table.add_column("Slug", style="magenta")
+        table.add_column("Nome", style="green")
+        
+        # Adicionar schemas à tabela
+        for schema in schemas:
+            schema_id = str(schema.get('id', 'N/A'))
+            schema_slug = schema.get('slug', 'N/A')
+            schema_name = schema.get('name', 'Sem nome')
+            
+            table.add_row(schema_id, schema_slug, schema_name)
+        
+        console.print(table)
+        console.print(f"\n[dim]Total: {len(schemas)} schema(s) encontrado(s)[/dim]")
         
         # Opção para voltar
         console.print("\n[0] Voltar")
@@ -294,31 +310,42 @@ def _fetch_and_display_schemas(api_key: APIKey) -> bool:
 
 def show_statistics() -> None:
     """
-    Exibe estatísticas básicas do sistema
+    Exibe estatísticas básicas do sistema sem validar API
     """
     logger.info("📊 Exibindo estatísticas do sistema")
     try:
+        # Contagem de API Keys
         keys_count = secrets_store.get_keys_count()
         
-        logger.debug(f"📈 Estatísticas: {keys_count} API Keys cadastradas")
+        # Contagem de fontes de dados
+        from core.datasources_store import datasources_store
+        datasources_count = len(datasources_store.list_datasources())
+        
+        # Contagem de fontes com tabelas configuradas
+        datasources_with_tables = len([ds for ds in datasources_store.list_datasources() if ds.tables.selected])
+        
+        logger.debug(f"📈 Estatísticas: {keys_count} API Keys, {datasources_count} fontes de dados")
         console.print(f"\n[dim]📊 Estatísticas:[/dim]")
         console.print(f"[dim]   • API Keys cadastradas: {keys_count}[/dim]")
+        console.print(f"[dim]   • Fontes de dados: {datasources_count}[/dim]")
+        console.print(f"[dim]   • Fontes com tabelas: {datasources_with_tables}[/dim]")
         
-        # Só testar conectividade se houver chaves cadastradas
-        if keys_count > 0:
-            logger.debug("🔍 Testando conectividade com API")
-            success, message = http_client.test_connection()
-            status_color = "green" if success else "red"
-            status_icon = "✅" if success else "❌"
-            logger.debug(f"🌐 Resultado do teste de conectividade: {success} - {message}")
-            console.print(f"[dim]   • Conectividade API: [{status_color}]{status_icon} {message}[/{status_color}][/dim]")
-        else:
-            logger.debug("⏸️ Pulando teste de conectividade - nenhuma API Key cadastrada")
-            console.print(f"[dim]   • Conectividade API: [yellow]⏸️ Cadastre uma API Key primeiro[/yellow][/dim]")
+        # Verificar se existe cache de schemas (sem fazer chamada à API)
+        try:
+            import os
+            from core.paths import get_bridge_directory
+            schemas_cache_path = os.path.join(get_bridge_directory(), "cache", "schemas.json")
+            if os.path.exists(schemas_cache_path):
+                with open(schemas_cache_path, 'r', encoding='utf-8') as f:
+                    import json
+                    cache_data = json.load(f)
+                    schemas_count = len(cache_data.get('schemas', []))
+                    console.print(f"[dim]   • Schemas em cache: {schemas_count}[/dim]")
+        except Exception:
+            # Ignorar erros de cache
+            pass
         
     except Exception as e:
         logger.exception(f"❌ Erro ao exibir estatísticas: {e}")
-        # Ignorar erros de estatísticas
-        pass
         # Ignorar erros de estatísticas
         pass
