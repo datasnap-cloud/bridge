@@ -277,9 +277,15 @@ class FileUploader:
             cached_token = self.token_cache.get_token(schema_slug, mapping_name)
             if cached_token:
                 logger.debug(f"✅ Token encontrado no cache para {schema_slug}")
-                logger.debug(f"📋 Token ID: {cached_token.get('upload_id', 'N/A')}")
-                logger.debug(f"🔗 Upload URL: {cached_token.get('upload_url', 'N/A')[:50]}...")
-                return cached_token
+                # Converte CachedToken para dict para compatibilidade
+                token_dict = {
+                    'upload_id': cached_token.token_id,
+                    'upload_url': cached_token.upload_url,
+                    'expires_at': cached_token.expires_at
+                }
+                logger.debug(f"📋 Token ID: {token_dict.get('upload_id', 'N/A')}")
+                logger.debug(f"🔗 Upload URL: {token_dict.get('upload_url', 'N/A')[:50]}...")
+                return token_dict
             
             # Obtém novo token
             logger.info(f"🌐 Solicitando novo token da API para schema: {schema_slug}, mapping: {mapping_name}")
@@ -292,7 +298,7 @@ class FileUploader:
                 logger.debug(f"⏰ Token válido até: {token_info.get('expires_at', 'N/A')}")
                 
                 # Armazena no cache
-                self.token_cache.store_token(schema_slug, token_info)
+                self.token_cache.store_token(schema_slug, mapping_name, token_info)
                 logger.debug(f"💾 Token armazenado no cache para {schema_slug}")
                 return token_info
             else:
@@ -320,6 +326,11 @@ class FileUploader:
             upload_url = token_info['upload_url']
             upload_id = token_info['upload_id']
             
+            # Concatena o nome do arquivo JSONL à URL de upload
+            if not upload_url.endswith('/'):
+                upload_url += '/'
+            upload_url += file_info.file_path.name
+            
             logger.info(f"📤 Iniciando upload do arquivo: {file_info.file_path.name}")
             logger.debug(f"📁 Arquivo: {file_info.file_path}")
             logger.debug(f"📏 Tamanho: {file_info.file_size:,} bytes")
@@ -337,7 +348,7 @@ class FileUploader:
             files = {
                 'file': (
                     file_info.file_path.name,
-                    self._file_generator(file_info.file_path, tracker),
+                    open(file_info.file_path, 'rb'),
                     'application/octet-stream'
                 )
             }
@@ -352,15 +363,27 @@ class FileUploader:
             
             # Faz o upload
             logger.info(f"🚀 Executando PUT request para upload...")
-            response = self.session.post(
+            logger.info(f"🌐 URL de upload: {upload_url}")
+            logger.info(f"📋 Método HTTP: PUT")
+            logger.info(f"📦 Arquivo: {file_info.file_path.name}")
+            logger.info(f"📏 Tamanho do arquivo: {file_info.file_path.stat().st_size} bytes")
+            logger.info(f"🔑 Upload ID: {upload_id}")
+            logger.info(f"🔐 Checksum: {file_info.checksum}")
+            
+            response = self.session.put(
                 upload_url,
                 files=files,
                 data=data,
                 timeout=self.timeout
             )
             
-            logger.debug(f"📡 Status da resposta: {response.status_code}")
-            logger.debug(f"📝 Headers da resposta: {dict(response.headers)}")
+            logger.info(f"📡 Status da resposta: {response.status_code}")
+            logger.info(f"📝 Headers da resposta: {dict(response.headers)}")
+            if response.status_code != 200:
+                logger.error(f"❌ Erro no upload - Status: {response.status_code}")
+                logger.error(f"📄 Conteúdo da resposta: {response.text}")
+            else:
+                logger.info(f"✅ Upload realizado com sucesso!")
             
             response.raise_for_status()
             
