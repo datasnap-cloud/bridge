@@ -122,6 +122,7 @@ class ExtractionResult:
     """Resultado de uma extração de dados."""
     success: bool
     record_count: int
+    data: List[Dict[str, Any]] = None
     error_message: Optional[str] = None
     extraction_time: float = 0.0
     start_time: int = 0
@@ -131,6 +132,8 @@ class ExtractionResult:
         """Calcula o tempo de extração se não foi fornecido."""
         if self.extraction_time == 0.0 and self.start_time > 0 and self.end_time > 0:
             self.extraction_time = (self.end_time - self.start_time) / 1000.0
+        if self.data is None:
+            self.data = []
 
 
 def build_sql_query(mapping_config: Dict[str, Any]) -> Optional[str]:
@@ -301,24 +304,31 @@ class SQLServerExtractor(DataExtractor):
     def connect(self) -> bool:
         """Estabelece conexão com SQL Server."""
         try:
-            # Monta a string de conexão
-            server = self.config.get('server', 'localhost')
+            # Constrói a string de conexão
+            driver = self.config.get('driver', '{ODBC Driver 17 for SQL Server}')
+            server = self.config.get('host', 'localhost')
+            port = self.config.get('port', 1433)
             database = self.config.get('database')
             username = self.config.get('username')
             password = self.config.get('password')
-            driver = self.config.get('driver', 'ODBC Driver 17 for SQL Server')
             
-            if username and password:
-                conn_str = f"DRIVER={{{driver}}};SERVER={server};DATABASE={database};UID={username};PWD={password}"
-            else:
-                conn_str = f"DRIVER={{{driver}}};SERVER={server};DATABASE={database};Trusted_Connection=yes"
+            logger.debug(f"🔌 Conectando ao SQL Server: {server}:{port}/{database} como {username}")
             
-            self.connection = pyodbc.connect(conn_str)
-            logger.info(f"Conectado ao SQL Server: {server}/{database}")
+            conn_str = (
+                f"DRIVER={driver};"
+                f"SERVER={server},{port};"
+                f"DATABASE={database};"
+                f"UID={username};"
+                f"PWD={password};"
+                "TrustServerCertificate=yes;"
+            )
+            
+            self.connection = pyodbc.connect(conn_str, timeout=5)
+            logger.info(f"✅ Conectado ao SQL Server: {server}:{port}/{database}")
             return True
             
         except Exception as e:
-            logger.error(f"Erro ao conectar SQL Server: {e}")
+            logger.error(f"❌ Erro ao conectar SQL Server: {e}")
             return False
     
     def disconnect(self) -> None:
@@ -393,20 +403,29 @@ class PostgreSQLExtractor(DataExtractor):
     def connect(self) -> bool:
         """Estabelece conexão com PostgreSQL."""
         try:
+            host = self.config.get('host', 'localhost')
+            port = self.config.get('port', 5432)
+            database = self.config.get('database')
+            username = self.config.get('username')
+            password = self.config.get('password')
+            
+            logger.debug(f"🔌 Conectando ao PostgreSQL: {host}:{port}/{database} como {username}")
+            
             conn_params = {
-                'host': self.config.get('host', 'localhost'),
-                'port': self.config.get('port', 5432),
-                'database': self.config.get('database'),
-                'user': self.config.get('username'),
-                'password': self.config.get('password')
+                'host': host,
+                'port': port,
+                'database': database,
+                'user': username,
+                'password': password,
+                'connect_timeout': 5
             }
             
             self.connection = psycopg2.connect(**conn_params)
-            logger.info(f"Conectado ao PostgreSQL: {conn_params['host']}/{conn_params['database']}")
+            logger.info(f"✅ Conectado ao PostgreSQL: {host}:{port}/{database}")
             return True
             
         except Exception as e:
-            logger.error(f"Erro ao conectar PostgreSQL: {e}")
+            logger.error(f"❌ Erro ao conectar PostgreSQL: {e}")
             return False
     
     def disconnect(self) -> None:
@@ -477,12 +496,20 @@ class MySQLExtractor(DataExtractor):
     def connect(self) -> bool:
         """Estabelece conexão com MySQL."""
         try:
+            host = self.config.get('host', 'localhost')
+            port = self.config.get('port', 3306)
+            database = self.config.get('database')
+            username = self.config.get('username')
+            password = self.config.get('password')
+            
+            logger.debug(f"🔌 Conectando ao MySQL: {host}:{port}/{database} como {username}")
+            
             conn_params = {
-                'host': self.config.get('host', 'localhost'),
-                'port': self.config.get('port', 3306),
-                'database': self.config.get('database'),
-                'user': self.config.get('username'),
-                'password': self.config.get('password'),
+                'host': host,
+                'port': port,
+                'database': database,
+                'user': username,
+                'password': password,
                 'charset': self.config.get('charset', 'utf8mb4'),
                 'connect_timeout': self.config.get('connection_timeout', 5),
                 'read_timeout': self.config.get('read_timeout', 10),
@@ -490,11 +517,11 @@ class MySQLExtractor(DataExtractor):
             }
             
             self.connection = pymysql.connect(**conn_params)
-            logger.info(f"Conectado ao MySQL: {conn_params['host']}/{conn_params['database']}")
+            logger.info(f"✅ Conectado ao MySQL: {host}:{port}/{database}")
             return True
             
         except Exception as e:
-            logger.error(f"Erro ao conectar MySQL: {e}")
+            logger.error(f"❌ Erro ao conectar MySQL: {e}")
             return False
     
     def disconnect(self) -> None:
@@ -520,48 +547,54 @@ class MySQLExtractor(DataExtractor):
     
     def extract_data(self, query: str, batch_size: int = 1000) -> Iterator[List[Dict[str, Any]]]:
         """Extrai dados do MySQL."""
-        # DESENVOLVIMENTO: Simula extração de dados para evitar travamento
-        logger.info("DESENVOLVIMENTO: Simulando extração de dados MySQL")
+        logger.debug(f"🔍 Iniciando extração MySQL com query: {query}")
+        logger.debug(f"📊 Batch size configurado: {batch_size}")
         
-        # Retorna dados mock para teste
-        mock_data = [
-            {"id": 1, "name": "Test Record 1", "created_at": "2024-01-01T10:00:00"},
-            {"id": 2, "name": "Test Record 2", "created_at": "2024-01-01T11:00:00"},
-            {"id": 3, "name": "Test Record 3", "created_at": "2024-01-01T12:00:00"}
-        ]
+        if not self.connection:
+            logger.error("❌ Conexão MySQL não estabelecida")
+            raise RuntimeError("Conexão não estabelecida")
         
-        # Simula batches
-        for i in range(0, len(mock_data), batch_size):
-            batch = mock_data[i:i + batch_size]
-            yield batch
-        
-        # Código original comentado para desenvolvimento
-        # if not self.connection:
-        #     raise RuntimeError("Conexão não estabelecida")
-        # 
-        # with self.connection.cursor(pymysql.cursors.DictCursor) as cursor:
-        #     cursor.execute(query)
-        #     
-        #     while True:
-        #         rows = cursor.fetchmany(batch_size)
-        #         if not rows:
-        #             break
-        #         
-        #         # Converte tipos especiais
-        #         batch = []
-        #         for row in rows:
-        #             record = {}
-        #             for key, value in row.items():
-        #                 if hasattr(value, 'isoformat'):  # datetime
-        #                     value = value.isoformat()
-        #                 elif isinstance(value, bytes):
-        #                     value = value.decode('utf-8', errors='ignore')
-        #                 
-        #                 record[key] = value
-        #             
-        #             batch.append(record)
-        #         
-        #         yield batch
+        try:
+            with self.connection.cursor(pymysql.cursors.DictCursor) as cursor:
+                logger.debug("🔄 Executando query MySQL...")
+                cursor.execute(query)
+                logger.debug("✅ Query executada com sucesso")
+                
+                batch_count = 0
+                total_records = 0
+                
+                while True:
+                    rows = cursor.fetchmany(batch_size)
+                    if not rows:
+                        logger.debug(f"📋 Extração concluída: {batch_count} batches, {total_records} registros totais")
+                        break
+                    
+                    batch_count += 1
+                    batch_size_actual = len(rows)
+                    total_records += batch_size_actual
+                    
+                    logger.debug(f"📦 Processando batch {batch_count}: {batch_size_actual} registros")
+                    
+                    # Converte tipos especiais
+                    batch = []
+                    for row in rows:
+                        record = {}
+                        for key, value in row.items():
+                            if hasattr(value, 'isoformat'):  # datetime
+                                value = value.isoformat()
+                            elif isinstance(value, bytes):
+                                value = value.decode('utf-8', errors='ignore')
+                            
+                            record[key] = value
+                        
+                        batch.append(record)
+                    
+                    logger.debug(f"✅ Batch {batch_count} processado e convertido")
+                    yield batch
+                    
+        except Exception as e:
+            logger.error(f"❌ Erro durante extração MySQL: {e}")
+            raise
 
 
 class ExtractorFactory:
@@ -621,69 +654,103 @@ def extract_mapping_data(mapping_config: Dict[str, Any],
         Resultado da extração
     """
     start_time = get_current_timestamp()
+    mapping_name = mapping_config.get('name', 'unknown')
+    
+    logger.debug(f"🔄 Iniciando extração para mapeamento: {mapping_name}")
     
     try:
         # Resolve a configuração da fonte usando connection_ref
+        logger.debug(f"🔍 Resolvendo configuração da fonte de dados...")
         source_config = _resolve_source_config(mapping_config)
         if not source_config:
+            error_msg = "Não foi possível resolver a configuração da fonte de dados"
+            logger.error(f"❌ {error_msg}")
             return ExtractionResult(
                 success=False,
                 record_count=0,
-                error_message="Não foi possível resolver a configuração da fonte de dados",
+                error_message=error_msg,
                 start_time=start_time,
                 end_time=get_current_timestamp()
             )
         
         source_type = source_config.get('type')
+        host = source_config.get('host', 'N/A')
+        database = source_config.get('database', 'N/A')
+        
+        logger.info(f"🗄️ Fonte de dados: {source_type.upper()} | Host: {host} | Database: {database}")
         
         # Constrói a query automaticamente se não existir
+        logger.debug(f"🔧 Construindo query SQL...")
         query = build_sql_query(mapping_config)
         
         if not source_type:
+            error_msg = "Tipo de fonte não especificado"
+            logger.error(f"❌ {error_msg}")
             return ExtractionResult(
                 success=False,
                 record_count=0,
-                error_message="Tipo de fonte não especificado",
+                error_message=error_msg,
                 start_time=start_time,
                 end_time=get_current_timestamp()
             )
         
         if not query:
+            error_msg = "Não foi possível construir a query SQL"
+            logger.error(f"❌ {error_msg}")
             return ExtractionResult(
                 success=False,
                 record_count=0,
-                error_message="Não foi possível construir a query SQL",
+                error_message=error_msg,
                 start_time=start_time,
                 end_time=get_current_timestamp()
             )
         
+        # Log da query que será executada
+        logger.info(f"📝 Query SQL: {query}")
+        
         # Cria o extrator
+        logger.debug(f"🏭 Criando extrator para {source_type}...")
         extractor = ExtractorFactory.create_extractor(source_type, source_config)
         
         # Extrai os dados
         record_count = 0
+        all_data = []
+        batch_count = 0
+        
+        logger.debug(f"🔌 Estabelecendo conexão com a fonte de dados...")
         with extractor:
+            logger.debug(f"🧪 Testando conexão...")
             if not extractor.test_connection():
+                error_msg = "Falha na conexão com a fonte de dados"
+                logger.error(f"❌ {error_msg}")
                 return ExtractionResult(
                     success=False,
                     record_count=0,
-                    error_message="Falha na conexão com a fonte de dados",
+                    error_message=error_msg,
                     start_time=start_time,
                     end_time=get_current_timestamp()
                 )
             
+            logger.info(f"✅ Conexão estabelecida com sucesso!")
+            logger.debug(f"📊 Iniciando extração de dados em lotes de {batch_size} registros...")
+            
             for batch in extractor.extract_data(query, batch_size):
-                record_count += len(batch)
-                # Aqui os dados seriam processados pelo JSONLWriter
+                batch_count += 1
+                batch_size_actual = len(batch)
+                record_count += batch_size_actual
+                all_data.extend(batch)
+                
+                logger.debug(f"📦 Lote {batch_count}: {batch_size_actual} registros extraídos (Total: {record_count})")
         
         end_time = get_current_timestamp()
         extraction_time = end_time - start_time
         
-        logger.info(f"Extração concluída: {record_count} registros em {format_duration(extraction_time)}")
+        logger.info(f"✅ Extração concluída: {record_count} registros em {batch_count} lotes | Tempo: {format_duration(extraction_time)}")
         
         return ExtractionResult(
             success=True,
             record_count=record_count,
+            data=all_data,
             extraction_time=extraction_time,
             start_time=start_time,
             end_time=end_time
@@ -692,7 +759,7 @@ def extract_mapping_data(mapping_config: Dict[str, Any],
     except Exception as e:
         end_time = get_current_timestamp()
         error_msg = f"Erro na extração: {e}"
-        logger.error(error_msg)
+        logger.error(f"❌ {error_msg}")
         
         return ExtractionResult(
             success=False,

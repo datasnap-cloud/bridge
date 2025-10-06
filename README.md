@@ -463,35 +463,7 @@ python -m pytest tests/ --cov=core --cov=setup
 python -m pytest tests/test_crypto.py
 ```
 
-#### Testes de Integração e Funcionais
-```bash
-# Teste completo do fluxo principal
-python test_full_flow.py
 
-# Teste das estatísticas otimizadas
-python test_statistics.py
-python test_menu_statistics.py
-
-# Teste de paginação de schemas
-python test_schema_pagination.py
-
-# Teste de vinculação de tabelas
-python test_option4.py
-python test_option4_interactive.py
-python test_with_tables.py
-
-# Teste de fontes de dados
-python test_datasources.py
-```
-
-#### Demos Interativos
-```bash
-# Demo de paginação de schemas
-python demo_schema_pagination.py
-
-# Demo de estatísticas otimizadas
-python demo_statistics.py
-```
 
 ### Estrutura dos Testes
 

@@ -4,10 +4,27 @@ CLI principal do DataSnap Bridge
 """
 
 import asyncio
+import os
 import typer
+from pathlib import Path
 from rich.console import Console
 from rich.table import Table
 from typing import List, Optional
+
+# Carrega variáveis de ambiente do arquivo .env
+def load_env():
+    """Carrega variáveis de ambiente do arquivo .env"""
+    env_file = Path(__file__).parent / '.env'
+    if env_file.exists():
+        with open(env_file, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#') and '=' in line:
+                    key, value = line.split('=', 1)
+                    os.environ[key.strip()] = value.strip()
+
+# Carrega .env antes de importar o logger
+load_env()
 
 from core.logger import logger
 

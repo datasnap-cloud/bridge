@@ -38,6 +38,13 @@ class DataSnapAPI:
             'User-Agent': 'DataSnap-Bridge/1.0',
             'Content-Type': 'application/json'
         })
+        
+        # Desabilitar verificação SSL
+        self.session.verify = False
+        # Suprimir warnings de SSL
+        import urllib3
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        
         self._api_key = None
         self._load_api_key()
     

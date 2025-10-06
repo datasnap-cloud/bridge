@@ -1,8 +1,6 @@
 """
-Módulo principal para orquestração da sincronização de mapeamentos.
-
-Este módulo coordena todo o pipeline de sincronização, desde a extração
-dos dados até o upload para a API DataSnap.
+Módulo principal para execução de sincronizações.
+Gerencia o processo completo de extração, transformação e upload de dados.
 """
 
 import asyncio
@@ -18,10 +16,10 @@ from core.paths import BridgePaths
 from core.timeutil import Timer, get_current_timestamp, format_duration
 from datasnap.api import DataSnapAPI
 from sync.extractor import extract_mapping_data, test_source_connection
-from sync.jsonl_writer import JSONLBatchWriter
+from sync.jsonl_writer import JSONLBatchWriter, JSONLFileInfo
 from sync.metrics import get_metrics_collector
 from sync.token_cache import TokenCache
-from sync.uploader import BatchUploader
+from sync.uploader import BatchUploader, UploadProgress
 
 
 @dataclass
@@ -149,25 +147,56 @@ class SyncRunner:
                 )
             
             # Escrever arquivos JSONL
-            self.logger.info(f"[DEBUG] Escrevendo arquivos JSONL...")
+            self.logger.info(f"📝 Escrevendo arquivos JSONL...")
             jsonl_files = await self._write_jsonl_files(mapping_name, records)
-            self.logger.info(f"[DEBUG] Arquivos JSONL criados: {len(jsonl_files)}")
+            self.logger.info(f"✅ Arquivos JSONL criados: {len(jsonl_files)}")
             
             # Upload dos arquivos
-            upload_results = []
+            upload_success = True
+            files_uploaded = 0
             if not self.config.dry_run:
-                upload_results = await self._upload_files(mapping_name, jsonl_files)
+                self.logger.info(f"🔄 Convertendo Path objects para JSONLFileInfo...")
+                # Converter Path objects para JSONLFileInfo
+                from sync.jsonl_writer import JSONLFileInfo
+                from core.timeutil import get_current_timestamp
+                import hashlib
+                
+                files_info = []
+                for file_path in jsonl_files:
+                    if file_path.exists():
+                        file_size = file_path.stat().st_size
+                        # Calcular checksum simples
+                        with open(file_path, 'rb') as f:
+                            checksum = hashlib.md5(f.read()).hexdigest()
+                        
+                        file_info = JSONLFileInfo(
+                            file_path=file_path,
+                            record_count=0,  # Será atualizado pelo writer
+                            file_size=file_size,
+                            compressed=file_path.suffix == '.gz',
+                            checksum=checksum,
+                            created_at=get_current_timestamp(),
+                            mapping_name=mapping_name,
+                            schema_slug=schema_slug
+                        )
+                        files_info.append(file_info)
+                        self.logger.debug(f"📄 Arquivo convertido: {file_path.name} -> {file_size} bytes, checksum: {checksum[:8]}...")
+                
+                self.logger.info(f"🚀 Iniciando upload de {len(files_info)} arquivos...")
+                upload_success = self._upload_files(files_info, mapping_name)
+                files_uploaded = len(files_info) if upload_success else 0
+                self.logger.info(f"📊 Upload concluído: sucesso={upload_success}, arquivos enviados={files_uploaded}")
+            else:
+                self.logger.info(f"🔄 Modo dry-run ativo - pulando upload")
             
             # Calcular estatísticas
             total_records = len(records)
             files_created = len(jsonl_files)
-            files_uploaded = len([r for r in upload_results if r.success])
             
             # Atualizar estado
             self.state_store.finish_sync_success(
                 mapping_name, 
-                total_records, 
-                files_uploaded
+                total_records
             )
             
             self.metrics.finish_sync_metrics(success=True)
@@ -278,54 +307,78 @@ class SyncRunner:
             'running_syncs': list(self._running_syncs),
             'total_mappings': len(self._get_available_mappings()),
             'last_sync_times': {
-                name: state.last_sync_time 
+                name: state.last_sync_timestamp 
                 for name, state in states.items()
-                if state.last_sync_time
+                if state.last_sync_timestamp
             },
             'sync_counts': {
-                name: state.total_syncs 
+                name: state.sync_count 
                 for name, state in states.items()
             },
             'error_counts': {
-                name: state.error_count 
+                name: 1 if state.last_error else 0
                 for name, state in states.items()
-                if state.error_count > 0
+                if state.last_error
             }
         }
     
     def _load_mapping_config(self, mapping_name: str) -> Optional[Dict]:
         """Carrega a configuração de um mapeamento."""
         try:
+            self.logger.debug(f"📋 Iniciando carregamento da configuração do mapeamento: {mapping_name}")
             mapping_file = self.paths.get_mapping_file(mapping_name)
-            self.logger.info(f"[DEBUG] Tentando carregar arquivo de mapeamento: {mapping_file}")
+            self.logger.debug(f"📁 Caminho do arquivo de mapeamento: {mapping_file}")
+            
             if not mapping_file.exists():
-                self.logger.error(f"[DEBUG] Arquivo de mapeamento não existe: {mapping_file}")
+                self.logger.error(f"❌ Arquivo de mapeamento não encontrado: {mapping_file}")
                 return None
+            
+            file_size = mapping_file.stat().st_size
+            self.logger.debug(f"📊 Tamanho do arquivo: {file_size} bytes")
             
             import json
             with open(mapping_file, 'r', encoding='utf-8') as f:
                 config = json.load(f)
-                self.logger.info(f"[DEBUG] Configuração carregada: {config}")
-                return config
+                
+            self.logger.info(f"✅ Configuração do mapeamento carregada com sucesso")
+            self.logger.debug(f"🔧 Fonte de dados: {config.get('source_type', 'N/A')}")
+            self.logger.debug(f"🏷️ Schema slug: {config.get('schema_slug', 'N/A')}")
+            self.logger.debug(f"🗂️ Tabela: {config.get('table_name', 'N/A')}")
+            
+            return config
         except Exception as e:
-            self.logger.error(f"Erro ao carregar mapeamento {mapping_name}: {e}")
+            self.logger.error(f"💥 Erro ao carregar mapeamento {mapping_name}: {e}")
             return None
     
     async def _test_source_connection(self, mapping_config: Dict) -> None:
         """Testa a conexão com a fonte de dados."""
         try:
+            self.logger.info(f"🔌 Testando conexão com a fonte de dados...")
+            self.logger.debug(f"🔧 Tipo da fonte: {mapping_config.get('source_type', 'N/A')}")
+            self.logger.debug(f"🏠 Host: {mapping_config.get('host', 'N/A')}")
+            self.logger.debug(f"🗂️ Database: {mapping_config.get('database', 'N/A')}")
+            
             success, error = await asyncio.to_thread(
                 test_source_connection, 
                 mapping_config
             )
+            
             if not success:
+                self.logger.error(f"❌ Falha na conexão com a fonte: {error}")
                 raise ConnectionError(f"Falha na conexão com a fonte: {error}")
+            
+            self.logger.info(f"✅ Conexão com a fonte de dados estabelecida com sucesso")
+            
         except Exception as e:
+            self.logger.error(f"💥 Erro ao testar conexão: {e}")
             raise ConnectionError(f"Erro ao testar conexão: {e}")
     
     async def _extract_data(self, mapping_config: Dict) -> List[Dict]:
         """Extrai dados da fonte."""
         try:
+            self.logger.info(f"📊 Iniciando extração de dados...")
+            self.logger.debug(f"🔧 Configuração: {mapping_config.get('source_type', 'N/A')} -> {mapping_config.get('table_name', 'N/A')}")
+            
             extraction_result = await asyncio.to_thread(
                 extract_mapping_data, 
                 mapping_config
@@ -333,13 +386,20 @@ class SyncRunner:
             
             # extract_mapping_data retorna ExtractionResult, não uma lista
             if not extraction_result.success:
+                self.logger.error(f"❌ Falha na extração: {extraction_result.error_message}")
                 raise RuntimeError(f"Falha na extração: {extraction_result.error_message}")
             
-            # Por enquanto, retornamos uma lista vazia já que não temos os dados reais
-            # TODO: Implementar retorno dos dados extraídos do ExtractionResult
-            return []
+            records_count = len(extraction_result.data) if extraction_result.data else 0
+            self.logger.info(f"✅ Extração concluída com sucesso: {records_count} registros extraídos")
+            
+            if records_count > 0:
+                self.logger.debug(f"📋 Primeiro registro (amostra): {extraction_result.data[0] if extraction_result.data else 'N/A'}")
+            
+            # Agora retornamos os dados reais do ExtractionResult
+            return extraction_result.data or []
             
         except Exception as e:
+            self.logger.error(f"💥 Erro na extração de dados: {e}")
             raise RuntimeError(f"Erro na extração de dados: {e}")
     
     async def _write_jsonl_files(
@@ -349,48 +409,132 @@ class SyncRunner:
     ) -> List[Path]:
         """Escreve os registros em arquivos JSONL."""
         try:
-            output_dir = self.paths.get_temp_upload_dir()
+            self.logger.info(f"📝 Iniciando escrita de arquivos JSONL...")
+            self.logger.debug(f"📊 Total de registros para escrever: {len(records)}")
+            
+            output_dir = self.paths.uploads_dir
+            self.logger.debug(f"📁 Diretório de saída: {output_dir}")
             
             batch_writer = JSONLBatchWriter(
+                mapping_name=mapping_name,
+                schema_slug=mapping_name,  # Usando mapping_name como schema_slug por enquanto
                 output_dir=output_dir,
-                file_prefix=f"{mapping_name}_",
+                compress=True,
                 max_records_per_file=self.config.batch_size,
-                max_file_size_mb=self.config.max_file_size_mb,
-                compress=True
+                max_file_size=self.config.max_file_size_mb * 1024 * 1024  # Convertendo MB para bytes
             )
             
-            return await asyncio.to_thread(
-                batch_writer.write_records,
-                records
-            )
+            self.logger.debug(f"🔧 Configuração do writer: batch_size={self.config.batch_size}, max_file_size={self.config.max_file_size_mb}MB, compress=True")
+            
+            with batch_writer:
+                batch_writer.write_batch(records)
+                files_info = batch_writer.close()
+            
+            file_paths = [file_info.file_path for file_info in files_info]
+            self.logger.info(f"✅ Arquivos JSONL criados com sucesso: {len(file_paths)} arquivo(s)")
+            
+            # Log detalhado dos arquivos criados
+            for i, file_path in enumerate(file_paths):
+                if file_path.exists():
+                    file_size = file_path.stat().st_size
+                    self.logger.debug(f"📄 Arquivo {i+1}: {file_path.name} ({file_size} bytes)")
+                else:
+                    self.logger.warning(f"⚠️ Arquivo {i+1} não encontrado: {file_path}")
+            
+            return file_paths
         except Exception as e:
+            self.logger.error(f"💥 Erro ao escrever arquivos JSONL: {e}")
             raise RuntimeError(f"Erro ao escrever arquivos JSONL: {e}")
     
-    async def _upload_files(
-        self, 
-        mapping_name: str, 
-        jsonl_files: List[Path]
-    ) -> List:
-        """Faz upload dos arquivos JSONL."""
+    def _upload_files(self, files_info: List[JSONLFileInfo], mapping_name: str) -> bool:
+        """
+        Faz upload dos arquivos JSONL.
+        
+        Args:
+            files_info: Lista de informações dos arquivos
+            mapping_name: Nome do mapeamento
+            
+        Returns:
+            True se todos os uploads foram bem-sucedidos
+        """
+        if not files_info:
+            self.logger.info(f"📤 Nenhum arquivo para upload no mapeamento {mapping_name}")
+            return True
+        
+        start_time = get_current_timestamp()
+        self.logger.info(f"📤 Iniciando upload de {len(files_info)} arquivo(s) para o mapeamento {mapping_name}")
+        
+        # Log detalhado dos arquivos que serão enviados
+        total_size = 0
+        for i, file_info in enumerate(files_info):
+            if file_info.file_path.exists():
+                file_size = file_info.file_path.stat().st_size
+                total_size += file_size
+                self.logger.debug(f"📄 Arquivo {i+1}: {file_info.file_path.name} ({file_size} bytes, {file_info.record_count} registros)")
+            else:
+                self.logger.warning(f"⚠️ Arquivo {i+1} não encontrado: {file_info.file_path}")
+        
+        self.logger.info(f"📊 Total de dados para upload: {total_size} bytes ({total_size / 1024 / 1024:.2f} MB)")
+        
         try:
-            uploader = BatchUploader(
-                api=self.api,
-                token_cache=self.token_cache,
-                max_workers=self.config.max_workers,
-                retry_attempts=self.config.retry_attempts
+            # Obtém schema slug do mapeamento (usando mapping_name por enquanto)
+            schema_slug = mapping_name
+            self.logger.debug(f"🏷️ Schema slug para {mapping_name}: {schema_slug}")
+            
+            # Cria uploader
+            self.logger.debug(f"🔧 Criando BatchUploader...")
+            uploader = BatchUploader(self.api, self.token_cache)
+            
+            # Callback de progresso
+            def progress_callback(filename: str, progress: UploadProgress):
+                self.logger.info(f"📈 Upload progress - {filename}: {progress.percentage:.1f}% "
+                               f"({progress.bytes_uploaded}/{progress.total_bytes} bytes)")
+            
+            # Faz upload
+            self.logger.info(f"🚀 Iniciando upload para schema {schema_slug}...")
+            results = uploader.upload_files(files_info, schema_slug, progress_callback, mapping_name)
+            
+            # Analisa resultados
+            successful_uploads = [r for r in results if r.success]
+            failed_uploads = [r for r in results if not r.success]
+            
+            self.logger.info(f"📊 Resultados do upload: {len(successful_uploads)} sucessos, {len(failed_uploads)} falhas")
+            
+            # Log detalhado dos resultados
+            for result in results:
+                if result.success:
+                    self.logger.info(f"✅ Upload bem-sucedido: {result.file_info.file_path.name} -> upload_id: {result.upload_id}")
+                else:
+                    self.logger.error(f"❌ Upload falhou: {result.file_info.file_path.name} -> erro: {result.error_message}")
+            
+            # Atualiza métricas
+            total_records = sum(result.file_info.record_count for result in successful_uploads)
+            upload_duration = get_current_timestamp() - start_time
+            total_retries = sum(result.retry_count for result in results)
+            self.metrics.update_upload_metrics(
+                files_uploaded=len(successful_uploads), 
+                records_uploaded=total_records,
+                duration=upload_duration,
+                retry_count=total_retries
             )
             
-            return await uploader.upload_files(
-                files=jsonl_files,
-                schema_name=mapping_name
-            )
+            if len(failed_uploads) == 0:
+                self.logger.info(f"🎉 Todos os uploads foram bem-sucedidos para {mapping_name}")
+            else:
+                self.logger.warning(f"⚠️ {len(failed_uploads)} upload(s) falharam para {mapping_name}")
+            
+            return len(failed_uploads) == 0
+            
         except Exception as e:
-            raise RuntimeError(f"Erro no upload dos arquivos: {e}")
+            self.logger.error(f"💥 Erro durante processo de upload para {mapping_name}: {e}")
+            return False
     
     def _get_available_mappings(self) -> List[str]:
         """Retorna a lista de mapeamentos disponíveis."""
         try:
-            return self.paths.list_mapping_files()
+            mapping_files = self.paths.list_mapping_files()
+            # Converte Path objects para strings (apenas o nome do arquivo sem extensão)
+            return [path.stem for path in mapping_files]
         except Exception as e:
             self.logger.error(f"Erro ao listar mapeamentos: {e}")
             return []

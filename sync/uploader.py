@@ -151,15 +151,22 @@ class FileUploader:
         retry_strategy = Retry(
             total=max_retries,
             status_forcelist=[429, 500, 502, 503, 504],
-            method_whitelist=["HEAD", "GET", "PUT", "DELETE", "OPTIONS", "TRACE", "POST"],
+            allowed_methods=["HEAD", "GET", "PUT", "DELETE", "OPTIONS", "TRACE", "POST"],
             backoff_factor=1
         )
         adapter = HTTPAdapter(max_retries=retry_strategy)
         self.session.mount("http://", adapter)
         self.session.mount("https://", adapter)
+        
+        # Desabilitar verificação SSL
+        self.session.verify = False
+        # Suprimir warnings de SSL
+        import urllib3
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
     
     def upload_file(self, file_info: JSONLFileInfo, schema_slug: str,
-                   progress_callback: Optional[Callable[[UploadProgress], None]] = None) -> UploadResult:
+                   progress_callback: Optional[Callable[[UploadProgress], None]] = None,
+                   mapping_name: str = None) -> UploadResult:
         """
         Faz upload de um arquivo.
         
@@ -167,6 +174,7 @@ class FileUploader:
             file_info: Informações do arquivo
             schema_slug: Slug do schema
             progress_callback: Callback de progresso
+            mapping_name: Nome do mapeamento (opcional)
             
         Returns:
             Resultado do upload
@@ -174,13 +182,21 @@ class FileUploader:
         start_time = get_current_timestamp()
         retry_count = 0
         
+        logger.info(f"🎯 Iniciando processo de upload")
+        logger.debug(f"📁 Arquivo: {file_info.file_path.name}")
+        logger.debug(f"📊 Schema: {schema_slug}")
+        logger.debug(f"🗂️ Mapping: {mapping_name or 'N/A'}")
+        logger.debug(f"🔄 Máximo de tentativas: {self.max_retries + 1}")
+        
         for attempt in range(self.max_retries + 1):
             try:
-                logger.info(f"Iniciando upload: {file_info.file_path.name} (tentativa {attempt + 1})")
+                logger.info(f"🔄 Tentativa {attempt + 1}/{self.max_retries + 1} para {file_info.file_path.name}")
                 
                 # Obtém token de upload
-                token_info = self._get_upload_token(schema_slug)
+                logger.debug(f"🔑 Obtendo token de upload...")
+                token_info = self._get_upload_token(schema_slug, mapping_name)
                 if not token_info:
+                    logger.error(f"❌ Falha ao obter token de upload na tentativa {attempt + 1}")
                     return UploadResult(
                         success=False,
                         file_info=file_info,
@@ -188,38 +204,52 @@ class FileUploader:
                         retry_count=attempt
                     )
                 
+                logger.debug(f"✅ Token obtido, iniciando upload...")
+                
                 # Faz o upload
                 upload_id = self._perform_upload(
                     file_info, token_info, progress_callback
                 )
                 
                 if upload_id:
+                    logger.debug(f"📤 Upload realizado, notificando conclusão...")
                     # Notifica conclusão
                     success = self._notify_upload_completion(upload_id, file_info)
                     
                     if success:
                         end_time = get_current_timestamp()
+                        duration = end_time - start_time
+                        logger.info(f"🎉 Upload concluído com sucesso!")
+                        logger.debug(f"⏱️ Duração total: {duration}ms")
+                        logger.debug(f"📊 Bytes enviados: {file_info.file_size:,}")
+                        logger.debug(f"🔄 Tentativas utilizadas: {attempt + 1}")
+                        
                         return UploadResult(
                             success=True,
                             file_info=file_info,
                             upload_id=upload_id,
                             upload_time=start_time,
-                            upload_duration=end_time - start_time,
+                            upload_duration=duration,
                             bytes_uploaded=file_info.file_size,
                             retry_count=attempt
                         )
+                    else:
+                        logger.warning(f"⚠️ Upload realizado mas falha na notificação de conclusão")
+                else:
+                    logger.warning(f"⚠️ Upload falhou na tentativa {attempt + 1}")
                 
             except Exception as e:
                 retry_count = attempt
-                logger.warning(f"Tentativa {attempt + 1} falhou: {e}")
+                logger.warning(f"💥 Tentativa {attempt + 1} falhou: {e}")
                 
                 if attempt < self.max_retries:
                     wait_time = 2 ** attempt  # Backoff exponencial
-                    logger.info(f"Aguardando {wait_time}s antes da próxima tentativa...")
+                    logger.info(f"⏳ Aguardando {wait_time}s antes da próxima tentativa...")
                     time.sleep(wait_time)
                 else:
-                    logger.error(f"Upload falhou após {self.max_retries + 1} tentativas")
+                    logger.error(f"❌ Upload falhou após {self.max_retries + 1} tentativas")
         
+        logger.error(f"💀 Upload definitivamente falhou para {file_info.file_path.name}")
         return UploadResult(
             success=False,
             file_info=file_info,
@@ -227,34 +257,51 @@ class FileUploader:
             retry_count=retry_count
         )
     
-    def _get_upload_token(self, schema_slug: str) -> Optional[Dict[str, Any]]:
+    def _get_upload_token(self, schema_slug: str, mapping_name: str = None) -> Optional[Dict[str, Any]]:
         """
         Obtém token de upload (com cache).
         
         Args:
             schema_slug: Slug do schema
+            mapping_name: Nome do mapeamento (opcional, usa schema_slug se não fornecido)
             
         Returns:
             Informações do token ou None
         """
         try:
+            # Se mapping_name não foi fornecido, usa o schema_slug
+            if not mapping_name:
+                mapping_name = schema_slug
+                
+            logger.debug(f"🔑 Obtendo token de upload para schema: {schema_slug}, mapping: {mapping_name}")
+            
             # Verifica cache primeiro
-            cached_token = self.token_cache.get_token(schema_slug)
+            cached_token = self.token_cache.get_token(schema_slug, mapping_name)
             if cached_token:
-                logger.debug(f"Usando token em cache para {schema_slug}")
+                logger.debug(f"✅ Token encontrado no cache para {schema_slug}")
+                logger.debug(f"📋 Token ID: {cached_token.get('upload_id', 'N/A')}")
+                logger.debug(f"🔗 Upload URL: {cached_token.get('upload_url', 'N/A')[:50]}...")
                 return cached_token
             
             # Obtém novo token
-            logger.debug(f"Obtendo novo token para {schema_slug}")
-            token_info = self.api.get_upload_token(schema_slug)
+            logger.info(f"🌐 Solicitando novo token da API para schema: {schema_slug}, mapping: {mapping_name}")
+            token_info = self.api.get_upload_token(schema_slug, mapping_name)
             
             if token_info:
+                logger.info(f"✅ Token obtido com sucesso!")
+                logger.debug(f"📋 Token ID: {token_info.get('upload_id', 'N/A')}")
+                logger.debug(f"🔗 Upload URL: {token_info.get('upload_url', 'N/A')[:50]}...")
+                logger.debug(f"⏰ Token válido até: {token_info.get('expires_at', 'N/A')}")
+                
                 # Armazena no cache
                 self.token_cache.store_token(schema_slug, token_info)
+                logger.debug(f"💾 Token armazenado no cache para {schema_slug}")
                 return token_info
+            else:
+                logger.error(f"❌ API retornou token vazio para schema: {schema_slug}")
             
         except Exception as e:
-            logger.error(f"Erro ao obter token de upload: {e}")
+            logger.error(f"💥 Erro ao obter token de upload para {schema_slug}: {e}")
         
         return None
     
@@ -275,10 +322,18 @@ class FileUploader:
             upload_url = token_info['upload_url']
             upload_id = token_info['upload_id']
             
+            logger.info(f"📤 Iniciando upload do arquivo: {file_info.file_path.name}")
+            logger.debug(f"📁 Arquivo: {file_info.file_path}")
+            logger.debug(f"📏 Tamanho: {file_info.file_size:,} bytes")
+            logger.debug(f"🔍 Checksum: {file_info.checksum}")
+            logger.debug(f"🆔 Upload ID: {upload_id}")
+            logger.debug(f"🔗 URL de upload: {upload_url[:50]}...")
+            
             # Configura rastreador de progresso
             tracker = None
             if progress_callback:
                 tracker = UploadProgressTracker(file_info.file_size, progress_callback)
+                logger.debug(f"📊 Rastreador de progresso configurado")
             
             # Prepara dados do formulário
             files = {
@@ -294,7 +349,11 @@ class FileUploader:
                 'checksum': file_info.checksum
             }
             
+            logger.debug(f"📋 Dados do formulário preparados")
+            logger.debug(f"🔧 Content-Type: application/octet-stream")
+            
             # Faz o upload
+            logger.info(f"🚀 Executando PUT request para upload...")
             response = self.session.post(
                 upload_url,
                 files=files,
@@ -302,13 +361,18 @@ class FileUploader:
                 timeout=self.timeout
             )
             
+            logger.debug(f"📡 Status da resposta: {response.status_code}")
+            logger.debug(f"📝 Headers da resposta: {dict(response.headers)}")
+            
             response.raise_for_status()
             
-            logger.info(f"Upload concluído: {file_info.file_path.name}")
+            logger.info(f"✅ Upload concluído com sucesso: {file_info.file_path.name}")
+            logger.debug(f"🎯 Upload ID retornado: {upload_id}")
             return upload_id
             
         except Exception as e:
-            logger.error(f"Erro durante upload: {e}")
+            logger.error(f"💥 Erro durante upload de {file_info.file_path.name}: {e}")
+            logger.debug(f"🔍 Detalhes do erro: {str(e)}")
             return None
     
     def _file_generator(self, file_path: Path, tracker: Optional[UploadProgressTracker] = None):
@@ -345,6 +409,12 @@ class FileUploader:
             True se bem-sucedido
         """
         try:
+            logger.info(f"📢 Notificando conclusão do upload para a API")
+            logger.debug(f"🆔 Upload ID: {upload_id}")
+            logger.debug(f"📏 Tamanho do arquivo: {file_info.file_size:,} bytes")
+            logger.debug(f"📊 Número de registros: {file_info.record_count:,}")
+            logger.debug(f"🔍 Checksum: {file_info.checksum}")
+            
             result = self.api.notify_upload_completion(
                 upload_id=upload_id,
                 file_size=file_info.file_size,
@@ -352,10 +422,19 @@ class FileUploader:
                 checksum=file_info.checksum
             )
             
-            return result.get('success', False)
+            success = result.get('success', False)
+            if success:
+                logger.info(f"✅ Notificação de conclusão enviada com sucesso")
+                logger.debug(f"📋 Resposta da API: {result}")
+            else:
+                logger.warning(f"⚠️ API retornou sucesso=False na notificação")
+                logger.debug(f"📋 Resposta da API: {result}")
+            
+            return success
             
         except Exception as e:
-            logger.error(f"Erro ao notificar conclusão do upload: {e}")
+            logger.error(f"💥 Erro ao notificar conclusão do upload: {e}")
+            logger.debug(f"🔍 Detalhes do erro: {str(e)}")
             return False
 
 
@@ -379,7 +458,8 @@ class BatchUploader:
         self.uploader_kwargs = uploader_kwargs
     
     def upload_files(self, files_info: List[JSONLFileInfo], schema_slug: str,
-                    progress_callback: Optional[Callable[[str, UploadProgress], None]] = None) -> List[UploadResult]:
+                    progress_callback: Optional[Callable[[str, UploadProgress], None]] = None,
+                    mapping_name: str = None) -> List[UploadResult]:
         """
         Faz upload de múltiplos arquivos.
         
@@ -387,6 +467,7 @@ class BatchUploader:
             files_info: Lista de informações dos arquivos
             schema_slug: Slug do schema
             progress_callback: Callback de progresso (recebe nome do arquivo e progresso)
+            mapping_name: Nome do mapeamento (opcional)
             
         Returns:
             Lista de resultados
@@ -414,7 +495,8 @@ class BatchUploader:
                     uploader.upload_file,
                     file_info,
                     schema_slug,
-                    file_progress_callback
+                    file_progress_callback,
+                    mapping_name
                 )
                 
                 future_to_file[future] = file_info

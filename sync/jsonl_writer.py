@@ -66,7 +66,7 @@ class JSONLWriter:
         
         # Configura diretórios
         self.paths = BridgePaths()
-        self.output_dir = output_dir or self.paths.get_uploads_dir()
+        self.output_dir = output_dir or self.paths.uploads_dir
         self.output_dir.mkdir(parents=True, exist_ok=True)
         
         # Estado do arquivo
@@ -274,7 +274,7 @@ class JSONLBatchWriter:
         
         # Configura diretórios
         self.paths = BridgePaths()
-        self.output_dir = output_dir or self.paths.get_uploads_dir()
+        self.output_dir = output_dir or self.paths.uploads_dir
         self.output_dir.mkdir(parents=True, exist_ok=True)
         
         # Estado
