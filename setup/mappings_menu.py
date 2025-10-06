@@ -46,11 +46,6 @@ def run_mappings_menu() -> None:
     # 6. Salvar mapeamento
     if _save_mapping(mapping_config):
         show_success_message(f"✅ Vínculo salvo em .bridge/mappings/{datasource['name']}.{table}.json")
-        
-        # 7. Opção de gerar modelos JSONL
-        choice = input("\n[G] Gerar modelos JSONL agora   [0] Voltar ao menu\n> ").strip().upper()
-        if choice == 'G':
-            _generate_jsonl_models(datasource, table, mapping_config)
 
 
 def _select_datasource() -> Optional[Dict[str, Any]]:
@@ -316,38 +311,34 @@ def _configure_mapping(datasource: Dict[str, Any], table: str, api_key_name: str
     # delete_after_upload
     delete_after = input("Excluir dados após upload? [s/N]: ").strip().lower() == 's'
     
-    # incremental_mode
-    print("incremental_mode:")
-    print("1. full")
-    print("2. incremental_pk")
-    print("3. incremental_timestamp")
-    print("4. custom_sql")
-    mode_choice = input("Escolha [1-4]: ").strip()
+    # incremental_mode (apenas incremental_pk por enquanto)
+    print("incremental_mode: incremental_pk (padrão)")
+    incremental_mode = 'incremental_pk'
     
-    mode_map = {
-        '1': 'full',
-        '2': 'incremental_pk',
-        '3': 'incremental_timestamp',
-        '4': 'custom_sql'
-    }
-    incremental_mode = mode_map.get(mode_choice, 'full')
-    
-    # pk_column (se necessário)
+    # pk_column (obrigatório para incremental_pk)
     pk_column = None
-    if incremental_mode == 'incremental_pk' or delete_after:
-        default_pk = f" [{detected_pk}]" if detected_pk else ""
-        pk_column = input(f"pk_column (ex.: id){default_pk}: ").strip()
-        if not pk_column and detected_pk:
-            pk_column = detected_pk
-        if not pk_column:
-            show_error_message("pk_column é obrigatório para este modo")
-            return None
+    default_pk = f" [{detected_pk}]" if detected_pk else ""
+    print("💡 Coluna de chave primária: identifica unicamente cada registro na tabela")
+    print("   Usada para controlar a sincronização incremental e evitar duplicatas")
+    print("   Exemplo: 'id', 'user_id', 'codigo_cliente'")
+    pk_column = input(f"Coluna de chave primária (ex.: id){default_pk}: ").strip()
+    if not pk_column and detected_pk:
+        pk_column = detected_pk
+    if not pk_column:
+        show_error_message("Coluna de chave primária é obrigatória para sincronização incremental")
+        return None
     
-    # initial_watermark
-    initial_watermark = input("initial_watermark [0]: ").strip() or "0"
+    # initial_watermark (valor inicial para sincronização incremental)
+    print("💡 Marca d'água inicial: define o ponto de partida para sincronização incremental")
+    print(f"   Apenas registros com {pk_column} > valor_informado serão sincronizados")
+    print("   Use '0' para sincronizar todos os registros desde o início")
+    initial_watermark = input("Marca d'água inicial (valor da chave primária) [0]: ").strip() or "0"
     
     # batch_size
-    batch_size_input = input("batch_size [5000]: ").strip()
+    print("💡 Tamanho do lote: quantidade de registros processados por vez")
+    print("   Lotes maiores = mais rápido, mas usa mais memória")
+    print("   Lotes menores = mais lento, mas usa menos recursos")
+    batch_size_input = input("Tamanho do lote [5000]: ").strip()
     try:
         batch_size = int(batch_size_input) if batch_size_input else 5000
     except ValueError:
@@ -355,7 +346,10 @@ def _configure_mapping(datasource: Dict[str, Any], table: str, api_key_name: str
     
     # order_by
     default_order = f"{pk_column} ASC" if pk_column else "id ASC"
-    order_by = input(f"order_by [{default_order}]: ").strip() or default_order
+    print("💡 Ordenação: define a ordem de processamento dos registros")
+    print("   ASC = crescente (1, 2, 3...), DESC = decrescente (3, 2, 1...)")
+    print("   Recomendado: usar a chave primária em ordem crescente")
+    order_by = input(f"Ordenação [{default_order}]: ").strip() or default_order
     
     # Confirmar exclusão se delete_after_upload
     delete_safety_enabled = False
@@ -474,67 +468,3 @@ def _ensure_mapping_directories() -> None:
     
     for directory in directories:
         os.makedirs(directory, exist_ok=True)
-
-
-def _generate_jsonl_models(datasource: Dict[str, Any], table: str, mapping_config: Dict[str, Any]) -> None:
-    """Gera arquivos de modelo JSONL com dados reais da tabela"""
-    try:
-        print(f"\nGerando modelo JSONL para {datasource['name']}.{table}...")
-        
-        # Criar diretório de modelos
-        models_dir = os.path.join(get_bridge_config_dir(), "models", datasource['name'])
-        os.makedirs(models_dir, exist_ok=True)
-        
-        # Caminho do arquivo JSONL
-        jsonl_file = os.path.join(models_dir, f"{table}.jsonl")
-        
-        # Conectar ao banco e obter dados
-        db_connector = create_database_connector(datasource)
-        
-        # Obter estrutura das colunas
-        columns = db_connector.get_table_columns(table)
-        if not columns:
-            show_error_message("Não foi possível obter estrutura da tabela")
-            return
-        
-        # Obter dados de amostra
-        pk_column = mapping_config['transfer'].get('pk_column')
-        sample_data = db_connector.sample_table_data(table, limit=100, order_by=pk_column)
-        
-        with open(jsonl_file, 'w', encoding='utf-8') as f:
-            if sample_data:
-                # Escrever dados reais
-                for record in sample_data:
-                    # Converter valores para tipos JSON serializáveis
-                    json_record = {}
-                    for key, value in record.items():
-                        if isinstance(value, datetime):
-                            json_record[key] = value.isoformat()
-                        elif value is None:
-                            json_record[key] = None
-                        else:
-                            json_record[key] = value
-                    
-                    f.write(json.dumps(json_record, ensure_ascii=False, default=str) + '\n')
-                
-                # Preencher até 100 linhas com registros vazios se necessário
-                for i in range(len(sample_data), 100):
-                    empty_record = {}
-                    for column in columns:
-                        empty_record[column['name']] = ""
-                    f.write(json.dumps(empty_record, ensure_ascii=False) + '\n')
-                
-                show_success_message(f"✅ Modelo JSONL gerado com {len(sample_data)} registros reais: {jsonl_file}")
-            else:
-                # Tabela vazia - criar 100 linhas em branco
-                for i in range(100):
-                    empty_record = {}
-                    for column in columns:
-                        empty_record[column['name']] = ""
-                    f.write(json.dumps(empty_record, ensure_ascii=False) + '\n')
-                
-                show_success_message(f"✅ Modelo JSONL gerado com 100 linhas em branco (tabela vazia): {jsonl_file}")
-        
-    except Exception as e:
-        logger.error(f"Erro ao gerar modelo JSONL: {e}")
-        show_error_message(f"Erro ao gerar modelo JSONL: {e}")

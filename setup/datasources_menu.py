@@ -4,7 +4,10 @@ Suporta MySQL e PostgreSQL com interface de terminal
 """
 
 import re
+import os
+import json
 from typing import List, Optional, Tuple
+from datetime import datetime
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt, Confirm
@@ -13,6 +16,8 @@ from rich.table import Table
 
 from core.datasources_store import datasources_store, DataSource, DatabaseConnection
 from core.database_validators import DatabaseValidatorFactory, TableInfo
+from core.database_connector import create_database_connector
+from core.paths import get_bridge_config_dir
 from core.logger import logger
 from setup.ui_helpers import show_success_message, show_error_message, show_warning_message, show_info_message
 
@@ -508,6 +513,17 @@ def _register_tables_for_datasource(datasource: DataSource) -> None:
             if datasources_store.save_selected_tables(datasource.name, selected_tables):
                 show_success_message(f"✅ Seleção salva! {len(selected_tables)} tabelas selecionadas.")
                 logger.info(f"📊 Tabelas salvas para {datasource.name}: {len(selected_tables)} tabelas")
+                
+                # Opção de gerar modelos JSONL
+                if selected_tables:
+                    choice = Prompt.ask(
+                        "\n[bold]Deseja gerar modelos JSONL para as tabelas selecionadas?[/bold]",
+                        choices=["s", "n"],
+                        default="s"
+                    ).strip().lower()
+                    
+                    if choice == 's':
+                        _generate_jsonl_models_for_datasource(datasource, selected_tables)
             else:
                 show_error_message("❌ Erro ao salvar seleção de tabelas.")
         else:
@@ -650,3 +666,104 @@ def _wait_for_continue() -> None:
         Prompt.ask("\n[dim]Pressione Enter para continuar...[/dim]", default="")
     except KeyboardInterrupt:
         pass
+
+
+def _generate_jsonl_models_for_datasource(datasource: DataSource, selected_tables: List[str]) -> None:
+    """
+    Gera arquivos de modelo JSONL para as tabelas selecionadas de uma fonte de dados
+    
+    Args:
+        datasource: Fonte de dados
+        selected_tables: Lista de nomes das tabelas selecionadas
+    """
+    try:
+        console.print(f"\n[yellow]📄 Gerando modelos JSONL para {len(selected_tables)} tabelas...[/yellow]")
+        
+        # Criar diretório de modelos
+        models_dir = os.path.join(get_bridge_config_dir(), "models", datasource.name)
+        os.makedirs(models_dir, exist_ok=True)
+        
+        # Converter DataSource para dict para compatibilidade
+        datasource_dict = {
+            'id': datasource.id,
+            'name': datasource.name,
+            'type': datasource.type,
+            'connection': {
+                'type': datasource.type,
+                'host': datasource.conn.host,
+                'port': datasource.conn.port,
+                'database': datasource.conn.database,
+                'user': datasource.conn.user,
+                'password': datasource.conn.password,
+                'options': datasource.conn.options
+            }
+        }
+        
+        # Conectar ao banco
+        db_connector = create_database_connector(datasource_dict)
+        
+        generated_count = 0
+        for table in selected_tables:
+            try:
+                console.print(f"  📄 Gerando modelo para tabela: [cyan]{table}[/cyan]")
+                
+                # Caminho do arquivo JSONL
+                jsonl_file = os.path.join(models_dir, f"{table}.jsonl")
+                
+                # Obter estrutura das colunas
+                columns = db_connector.get_table_columns(table)
+                if not columns:
+                    show_error_message(f"❌ Não foi possível obter estrutura da tabela {table}")
+                    continue
+                
+                # Obter dados de amostra (sem pk_column pois não temos mapeamento ainda)
+                sample_data = db_connector.sample_table_data(table, limit=100)
+                
+                with open(jsonl_file, 'w', encoding='utf-8') as f:
+                    if sample_data:
+                        # Escrever dados reais
+                        for record in sample_data:
+                            # Converter valores para tipos JSON serializáveis
+                            json_record = {}
+                            for key, value in record.items():
+                                if isinstance(value, datetime):
+                                    json_record[key] = value.isoformat()
+                                elif value is None:
+                                    json_record[key] = None
+                                else:
+                                    json_record[key] = value
+                            
+                            f.write(json.dumps(json_record, ensure_ascii=False, default=str) + '\n')
+                        
+                        # Preencher até 100 linhas com registros vazios se necessário
+                        for i in range(len(sample_data), 100):
+                            empty_record = {}
+                            for column in columns:
+                                empty_record[column['name']] = ""
+                            f.write(json.dumps(empty_record, ensure_ascii=False) + '\n')
+                        
+                        console.print(f"    ✅ Modelo gerado com {len(sample_data)} registros reais")
+                    else:
+                        # Tabela vazia - criar 100 linhas em branco
+                        for i in range(100):
+                            empty_record = {}
+                            for column in columns:
+                                empty_record[column['name']] = ""
+                            f.write(json.dumps(empty_record, ensure_ascii=False) + '\n')
+                        
+                        console.print(f"    ✅ Modelo gerado com 100 linhas em branco (tabela vazia)")
+                
+                generated_count += 1
+                
+            except Exception as e:
+                logger.error(f"Erro ao gerar modelo JSONL para tabela {table}: {e}")
+                show_error_message(f"❌ Erro ao gerar modelo para tabela {table}: {e}")
+        
+        if generated_count > 0:
+            show_success_message(f"✅ {generated_count} modelos JSONL gerados em: {models_dir}")
+        else:
+            show_error_message("❌ Nenhum modelo JSONL foi gerado")
+        
+    except Exception as e:
+        logger.exception(f"❌ Erro ao gerar modelos JSONL: {e}")
+        show_error_message(f"Erro ao gerar modelos JSONL: {e}")
