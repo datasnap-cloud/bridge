@@ -3,6 +3,8 @@ Módulo com ações do menu de setup
 """
 
 import json
+import os
+import glob
 from typing import List, Optional, Tuple
 from rich.console import Console
 from rich.table import Table
@@ -345,7 +347,76 @@ def show_statistics() -> None:
             # Ignorar erros de cache
             pass
         
+        # Exibir fluxo de dados (mapeamentos)
+        _show_data_flow()
+        
     except Exception as e:
         logger.exception(f"❌ Erro ao exibir estatísticas: {e}")
         # Ignorar erros de estatísticas
         pass
+
+
+def _show_data_flow() -> None:
+    """
+    Exibe o fluxo visual de dados (mapeamentos entre fontes e schemas)
+    """
+    try:
+        import os
+        import glob
+        from core.paths import get_bridge_config_dir
+        
+        mappings_dir = os.path.join(get_bridge_config_dir(), "mappings")
+        
+        if not os.path.exists(mappings_dir):
+            return
+        
+        # Buscar todos os arquivos de mapeamento
+        mapping_files = glob.glob(os.path.join(mappings_dir, "*.json"))
+        
+        if not mapping_files:
+            return
+        
+        console.print(f"\n[bold cyan]🔄 Fluxo de Dados:[/bold cyan]")
+        
+        # Agrupar mapeamentos por fonte de dados
+        mappings_by_source = {}
+        
+        for mapping_file in mapping_files:
+            try:
+                with open(mapping_file, 'r', encoding='utf-8') as f:
+                    mapping_data = json.load(f)
+                
+                source_name = mapping_data.get('source', {}).get('name', 'Desconhecido')
+                table_name = mapping_data.get('table', 'Desconhecida')
+                schema_name = mapping_data.get('schema', {}).get('name', 'Desconhecido')
+                schema_id = mapping_data.get('schema', {}).get('id', 'N/A')
+                
+                if source_name not in mappings_by_source:
+                    mappings_by_source[source_name] = []
+                
+                mappings_by_source[source_name].append({
+                    'table': table_name,
+                    'schema_name': schema_name,
+                    'schema_id': schema_id
+                })
+                
+            except Exception as e:
+                logger.warning(f"Erro ao ler mapeamento {mapping_file}: {e}")
+                continue
+        
+        # Exibir fluxo visual para cada fonte de dados
+        for source_name, mappings in mappings_by_source.items():
+            console.print(f"\n[yellow]📊 Fonte:[/yellow] [bold]{source_name}[/bold]")
+            
+            for mapping in mappings:
+                # Desenhar fluxo visual
+                console.print(f"   [cyan]├─[/cyan] [white]{mapping['table']}[/white] [dim]→[/dim] [green]{mapping['schema_name']}[/green] [dim](ID: {mapping['schema_id']})[/dim]")
+        
+        # Resumo
+        total_mappings = sum(len(mappings) for mappings in mappings_by_source.values())
+        console.print(f"\n[dim]   • Total de vínculos: {total_mappings}[/dim]")
+        console.print(f"[dim]   • Fontes vinculadas: {len(mappings_by_source)}[/dim]")
+        
+    except Exception as e:
+        logger.warning(f"Erro ao exibir fluxo de dados: {e}")
+        # Não exibir erro para o usuário, apenas log
