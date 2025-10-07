@@ -193,6 +193,10 @@ class SyncRunner:
             total_records = len(records)
             files_created = len(jsonl_files)
             
+            # Deletar registros do banco se delete_after_upload estiver habilitado e upload foi bem-sucedido
+            if upload_success and total_records > 0:
+                await self._handle_delete_after_upload(mapping_config, records, mapping_name)
+            
             # Atualizar watermark se houver registros e modo incremental
             if total_records > 0:
                 self._update_watermark(mapping_config, records)
@@ -589,6 +593,72 @@ class SyncRunner:
                 
         except Exception as e:
             self.logger.warning(f"Erro durante limpeza de arquivos temporários para {mapping_name}: {e}")
+    
+    async def _handle_delete_after_upload(self, mapping_config: Dict, records: List[Dict], mapping_name: str) -> None:
+        """
+        Deleta registros do banco de dados após upload bem-sucedido, se configurado.
+        
+        Args:
+            mapping_config: Configuração do mapeamento
+            records: Lista de registros que foram enviados
+            mapping_name: Nome do mapeamento
+        """
+        try:
+            # Verifica se delete_after_upload está habilitado
+            transfer_config = mapping_config.get('transfer', {})
+            delete_after_upload = transfer_config.get('delete_after_upload', False)
+            
+            if not delete_after_upload:
+                self.logger.debug(f"🔄 delete_after_upload não está habilitado para {mapping_name}, pulando deleção")
+                return
+            
+            if not records:
+                self.logger.debug(f"📊 Nenhum registro para deletar em {mapping_name}")
+                return
+            
+            # Identifica a chave primária para deleção
+            pk_column = transfer_config.get('pk_column')
+            if not pk_column:
+                self.logger.error(f"❌ Coluna de chave primária não configurada para delete_after_upload em {mapping_name}")
+                return
+            
+            # Coleta os IDs dos registros para deletar
+            record_ids = []
+            for record in records:
+                if pk_column in record and record[pk_column] is not None:
+                    record_ids.append(record[pk_column])
+            
+            if not record_ids:
+                self.logger.warning(f"⚠️ Nenhum ID válido encontrado para deleção em {mapping_name}")
+                return
+            
+            self.logger.info(f"🗑️ Iniciando deleção de {len(record_ids)} registros de {mapping_name}...")
+            
+            # Executa a deleção
+            from sync.extractor import delete_records_after_upload
+            
+            delete_result = await asyncio.to_thread(
+                delete_records_after_upload,
+                mapping_config,
+                record_ids,
+                pk_column
+            )
+            
+            if delete_result.success:
+                self.logger.info(f"✅ Deleção concluída com sucesso: {delete_result.deleted_count} registros removidos de {mapping_name}")
+                
+                # Atualiza métricas de deleção
+                self.metrics.update_deletion_metrics(
+                    records_deleted=delete_result.deleted_count,
+                    mapping_name=mapping_name
+                )
+            else:
+                self.logger.error(f"❌ Falha na deleção de registros em {mapping_name}: {delete_result.error_message}")
+                # Não propaga o erro para não falhar a sincronização
+            
+        except Exception as e:
+            self.logger.error(f"💥 Erro durante deleção de registros em {mapping_name}: {e}")
+            # Não propaga o erro para não falhar a sincronização
 
     def _update_watermark(self, mapping_config: Dict, records: List[Dict]) -> None:
         """Atualiza o watermark no arquivo de configuração após sincronização bem-sucedida."""

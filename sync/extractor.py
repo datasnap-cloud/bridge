@@ -119,21 +119,23 @@ def _load_unencrypted_datasource(datasource_name: str) -> Optional[Dict[str, Any
 
 @dataclass
 class ExtractionResult:
-    """Resultado de uma extração de dados."""
+    """Resultado de uma operação de extração."""
     success: bool
-    record_count: int
+    record_count: int = 0
     data: List[Dict[str, Any]] = None
-    error_message: Optional[str] = None
+    error_message: str = None
     extraction_time: float = 0.0
-    start_time: int = 0
-    end_time: int = 0
-    
-    def __post_init__(self):
-        """Calcula o tempo de extração se não foi fornecido."""
-        if self.extraction_time == 0.0 and self.start_time > 0 and self.end_time > 0:
-            self.extraction_time = (self.end_time - self.start_time) / 1000.0
-        if self.data is None:
-            self.data = []
+    start_time: str = None
+    end_time: str = None
+
+
+@dataclass
+class DeletionResult:
+    """Resultado de uma operação de deleção."""
+    success: bool
+    deleted_count: int = 0
+    error_message: str = None
+    deletion_time: float = 0.0
 
 
 def build_sql_query(mapping_config: Dict[str, Any]) -> Optional[str]:
@@ -767,6 +769,104 @@ def extract_mapping_data(mapping_config: Dict[str, Any],
             error_message=error_msg,
             start_time=start_time,
             end_time=end_time
+        )
+
+
+def delete_records_after_upload(mapping_config: Dict[str, Any], record_ids: List[Any], pk_column: str) -> DeletionResult:
+    """
+    Deleta registros do banco de dados após upload bem-sucedido.
+    
+    Args:
+        mapping_config: Configuração do mapeamento
+        record_ids: Lista de IDs dos registros para deletar
+        pk_column: Nome da coluna de chave primária
+        
+    Returns:
+        DeletionResult com o resultado da operação
+    """
+    start_time = time.time()
+    
+    try:
+        # Resolve a configuração da fonte
+        source_config = _resolve_source_config(mapping_config)
+        if not source_config:
+            return DeletionResult(
+                success=False,
+                error_message="Não foi possível resolver a configuração da fonte de dados"
+            )
+        
+        source_type = source_config.get('type')
+        if not source_type:
+            return DeletionResult(
+                success=False,
+                error_message="Tipo de fonte não especificado"
+            )
+        
+        table_name = mapping_config.get('table')
+        if not table_name:
+            return DeletionResult(
+                success=False,
+                error_message="Nome da tabela não especificado"
+            )
+        
+        # Verifica configurações de segurança
+        transfer_config = mapping_config.get('transfer', {})
+        delete_safety = transfer_config.get('delete_safety', {})
+        
+        if delete_safety.get('enabled', False):
+            where_column = delete_safety.get('where_column')
+            if where_column and where_column != pk_column:
+                logger.warning(f"⚠️ Configuração de segurança delete_safety habilitada com coluna diferente da PK")
+        
+        logger.info(f"🗑️ Iniciando deleção de {len(record_ids)} registros da tabela {table_name}")
+        
+        # Cria o extrator para executar a deleção
+        extractor = ExtractorFactory.create_extractor(source_type, source_config)
+        
+        deleted_count = 0
+        with extractor:
+            # Executa deleção em lotes para evitar problemas de performance
+            batch_size = 1000
+            for i in range(0, len(record_ids), batch_size):
+                batch_ids = record_ids[i:i + batch_size]
+                
+                # Constrói a query de deleção
+                placeholders = ','.join(['?' if source_type in ['sqlserver', 'sqlite'] else '%s'] * len(batch_ids))
+                delete_query = f"DELETE FROM {table_name} WHERE {pk_column} IN ({placeholders})"
+                
+                logger.debug(f"🔄 Executando deleção do lote {i//batch_size + 1}: {len(batch_ids)} registros")
+                
+                # Executa a deleção
+                cursor = extractor.connection.cursor()
+                cursor.execute(delete_query, batch_ids)
+                batch_deleted = cursor.rowcount
+                deleted_count += batch_deleted
+                
+                # Commit para cada lote
+                extractor.connection.commit()
+                cursor.close()
+                
+                logger.debug(f"✅ Lote {i//batch_size + 1} concluído: {batch_deleted} registros deletados")
+        
+        deletion_time = time.time() - start_time
+        
+        logger.info(f"✅ Deleção concluída: {deleted_count} registros removidos em {deletion_time:.2f}s")
+        
+        return DeletionResult(
+            success=True,
+            deleted_count=deleted_count,
+            deletion_time=deletion_time
+        )
+        
+    except Exception as e:
+        deletion_time = time.time() - start_time
+        error_msg = f"Erro na deleção: {e}"
+        logger.error(f"❌ {error_msg}")
+        
+        return DeletionResult(
+            success=False,
+            error_message=error_msg,
+            deletion_time=deletion_time
         )
 
 

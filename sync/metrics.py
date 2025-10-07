@@ -34,6 +34,7 @@ class SyncMetrics:
     records_extracted: int = 0
     records_written: int = 0
     records_uploaded: int = 0
+    records_deleted: int = 0
     
     # Métricas de arquivos
     files_created: int = 0
@@ -221,6 +222,23 @@ class MetricsCollector:
                 self.current_sync.records_uploaded = records_uploaded
                 self.current_sync.upload_time = duration
                 self.current_sync.retry_count = retry_count
+    
+    def update_deletion_metrics(self, records_deleted: int, mapping_name: str) -> None:
+        """
+        Atualiza métricas de deleção após upload.
+        
+        Args:
+            records_deleted: Número de registros deletados
+            mapping_name: Nome do mapeamento
+        """
+        with self._lock:
+            if self.current_sync:
+                # Adiciona informação de deleção às métricas atuais
+                if not hasattr(self.current_sync, 'records_deleted'):
+                    self.current_sync.records_deleted = 0
+                self.current_sync.records_deleted = records_deleted
+                
+                logger.info(f"📊 Métricas de deleção atualizadas: {records_deleted} registros deletados para {mapping_name}")
     
     def collect_system_metrics(self) -> SystemMetrics:
         """
