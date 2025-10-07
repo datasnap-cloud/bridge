@@ -193,6 +193,10 @@ class SyncRunner:
             total_records = len(records)
             files_created = len(jsonl_files)
             
+            # Atualizar watermark se houver registros e modo incremental
+            if total_records > 0:
+                self._update_watermark(mapping_config, records)
+            
             # Atualizar estado
             self.state_store.finish_sync_success(
                 mapping_name, 
@@ -537,6 +541,73 @@ class SyncRunner:
         except Exception as e:
             self.logger.error(f"💥 Erro durante processo de upload para {mapping_name}: {e}")
             return False
+    
+    def _update_watermark(self, mapping_config: Dict, records: List[Dict]) -> None:
+        """Atualiza o watermark no arquivo de configuração após sincronização bem-sucedida."""
+        try:
+            # Verifica se é sincronização incremental
+            transfer_config = mapping_config.get('transfer', {})
+            incremental_mode = transfer_config.get('incremental_mode', 'full')
+            
+            if incremental_mode not in ['incremental_pk', 'incremental_timestamp']:
+                self.logger.debug(f"🔄 Modo de sincronização não é incremental ({incremental_mode}), pulando atualização de watermark")
+                return
+            
+            # Determina a coluna do watermark baseada no modo
+            watermark_column = None
+            if incremental_mode == 'incremental_pk':
+                watermark_column = transfer_config.get('pk_column')
+            elif incremental_mode == 'incremental_timestamp':
+                watermark_column = transfer_config.get('timestamp_column')
+            
+            if not watermark_column:
+                self.logger.debug(f"📊 Coluna de watermark não configurada para modo {incremental_mode}, pulando atualização")
+                return
+            
+            if not records:
+                self.logger.debug(f"📊 Nenhum registro para atualizar watermark")
+                return
+            
+            # Encontra o maior valor da coluna watermark nos registros
+            max_watermark = None
+            for record in records:
+                if watermark_column in record and record[watermark_column] is not None:
+                    current_value = record[watermark_column]
+                    if max_watermark is None or current_value > max_watermark:
+                        max_watermark = current_value
+            
+            if max_watermark is None:
+                self.logger.warning(f"⚠️ Não foi possível encontrar valor válido para watermark na coluna '{watermark_column}'")
+                return
+            
+            # Atualiza o arquivo de configuração
+            mapping_name = f"{mapping_config.get('source', {}).get('name', 'unknown')}.{mapping_config.get('table', 'unknown')}"
+            mapping_file = self.paths.get_mapping_file(mapping_name)
+            
+            if not mapping_file.exists():
+                self.logger.error(f"❌ Arquivo de mapeamento não encontrado: {mapping_file}")
+                return
+            
+            # Lê o arquivo atual
+            import json
+            with open(mapping_file, 'r', encoding='utf-8') as f:
+                config_data = json.load(f)
+            
+            # Atualiza o watermark
+            old_watermark = config_data.get('transfer', {}).get('initial_watermark')
+            if 'transfer' not in config_data:
+                config_data['transfer'] = {}
+            config_data['transfer']['initial_watermark'] = str(max_watermark)
+            
+            # Salva o arquivo atualizado
+            with open(mapping_file, 'w', encoding='utf-8') as f:
+                json.dump(config_data, f, indent=2, ensure_ascii=False, default=str)
+            
+            self.logger.info(f"🔄 Watermark atualizado para {mapping_name}: {old_watermark} -> {max_watermark}")
+            
+        except Exception as e:
+            self.logger.error(f"💥 Erro ao atualizar watermark: {e}")
+            # Não propaga o erro para não falhar a sincronização
     
     def _get_available_mappings(self) -> List[str]:
         """Retorna a lista de mapeamentos disponíveis."""
