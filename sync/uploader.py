@@ -210,29 +210,22 @@ class FileUploader:
                 )
                 
                 if upload_id:
-                    logger.debug(f"📤 Upload realizado, notificando conclusão...")
-                    # Notifica conclusão
-                    success = self._notify_upload_completion(upload_id, file_info)
+                    end_time = get_current_timestamp()
+                    duration = end_time - start_time
+                    logger.info(f"🎉 Upload concluído com sucesso!")
+                    logger.debug(f"⏱️ Duração total: {duration}ms")
+                    logger.debug(f"📊 Bytes enviados: {file_info.file_size:,}")
+                    logger.debug(f"🔄 Tentativas utilizadas: {attempt + 1}")
                     
-                    if success:
-                        end_time = get_current_timestamp()
-                        duration = end_time - start_time
-                        logger.info(f"🎉 Upload concluído com sucesso!")
-                        logger.debug(f"⏱️ Duração total: {duration}ms")
-                        logger.debug(f"📊 Bytes enviados: {file_info.file_size:,}")
-                        logger.debug(f"🔄 Tentativas utilizadas: {attempt + 1}")
-                        
-                        return UploadResult(
-                            success=True,
-                            file_info=file_info,
-                            upload_id=upload_id,
-                            upload_time=start_time,
-                            upload_duration=duration,
-                            bytes_uploaded=file_info.file_size,
-                            retry_count=attempt
-                        )
-                    else:
-                        logger.warning(f"⚠️ Upload realizado mas falha na notificação de conclusão")
+                    return UploadResult(
+                        success=True,
+                        file_info=file_info,
+                        upload_id=upload_id,
+                        upload_time=start_time,
+                        upload_duration=duration,
+                        bytes_uploaded=file_info.file_size,
+                        retry_count=attempt
+                    )
                 else:
                     logger.warning(f"⚠️ Upload falhou na tentativa {attempt + 1}")
                 
@@ -344,21 +337,19 @@ class FileUploader:
                 tracker = UploadProgressTracker(file_info.file_size, progress_callback)
                 logger.debug(f"📊 Rastreador de progresso configurado")
             
-            # Prepara dados do formulário
-            files = {
-                'file': (
-                    file_info.file_path.name,
-                    open(file_info.file_path, 'rb'),
-                    'application/octet-stream'
-                )
+            # Lê o conteúdo do arquivo
+            with open(file_info.file_path, 'rb') as f:
+                file_content = f.read()
+            
+            # Prepara headers para o upload
+            headers = {
+                'Content-Type': 'application/octet-stream',
+                'Content-Length': str(len(file_content)),
+                'X-Upload-ID': str(upload_id),
+                'X-Checksum': file_info.checksum
             }
             
-            data = {
-                'upload_id': upload_id,
-                'checksum': file_info.checksum
-            }
-            
-            logger.debug(f"📋 Dados do formulário preparados")
+            logger.debug(f"📋 Conteúdo do arquivo carregado")
             logger.debug(f"🔧 Content-Type: application/octet-stream")
             
             # Faz o upload
@@ -366,14 +357,14 @@ class FileUploader:
             logger.info(f"🌐 URL de upload: {upload_url}")
             logger.info(f"📋 Método HTTP: PUT")
             logger.info(f"📦 Arquivo: {file_info.file_path.name}")
-            logger.info(f"📏 Tamanho do arquivo: {file_info.file_path.stat().st_size} bytes")
+            logger.info(f"📏 Tamanho do arquivo: {len(file_content)} bytes")
             logger.info(f"🔑 Upload ID: {upload_id}")
             logger.info(f"🔐 Checksum: {file_info.checksum}")
             
             response = self.session.put(
                 upload_url,
-                files=files,
-                data=data,
+                data=file_content,
+                headers=headers,
                 timeout=self.timeout
             )
             
@@ -417,46 +408,6 @@ class FileUploader:
                     tracker.update(len(chunk))
                 
                 yield chunk
-    
-    def _notify_upload_completion(self, upload_id: str, file_info: JSONLFileInfo) -> bool:
-        """
-        Notifica a API sobre a conclusão do upload.
-        
-        Args:
-            upload_id: ID do upload
-            file_info: Informações do arquivo
-            
-        Returns:
-            True se bem-sucedido
-        """
-        try:
-            logger.info(f"📢 Notificando conclusão do upload para a API")
-            logger.debug(f"🆔 Upload ID: {upload_id}")
-            logger.debug(f"📏 Tamanho do arquivo: {file_info.file_size:,} bytes")
-            logger.debug(f"📊 Número de registros: {file_info.record_count:,}")
-            logger.debug(f"🔍 Checksum: {file_info.checksum}")
-            
-            result = self.api.notify_upload_completion(
-                upload_id=upload_id,
-                file_size=file_info.file_size,
-                record_count=file_info.record_count,
-                checksum=file_info.checksum
-            )
-            
-            success = result.get('success', False)
-            if success:
-                logger.info(f"✅ Notificação de conclusão enviada com sucesso")
-                logger.debug(f"📋 Resposta da API: {result}")
-            else:
-                logger.warning(f"⚠️ API retornou sucesso=False na notificação")
-                logger.debug(f"📋 Resposta da API: {result}")
-            
-            return success
-            
-        except Exception as e:
-            logger.error(f"💥 Erro ao notificar conclusão do upload: {e}")
-            logger.debug(f"🔍 Detalhes do erro: {str(e)}")
-            return False
 
 
 class BatchUploader:

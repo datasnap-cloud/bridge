@@ -204,32 +204,6 @@ class DataSnapAPI:
         except requests.RequestException as e:
             raise DataSnapAPIError(f"Erro no upload: {e}")
     
-    def notify_upload_complete(self, token_id: str, file_size: int, 
-                              record_count: int) -> Dict[str, Any]:
-        """
-        Notifica a API que o upload foi concluído.
-        
-        Args:
-            token_id: ID do token de upload
-            file_size: Tamanho do arquivo em bytes
-            record_count: Número de registros no arquivo
-            
-        Returns:
-            Resposta da API
-            
-        Raises:
-            DataSnapAPIError: Em caso de erro na API
-        """
-        endpoint = f'/upload-tokens/{token_id}/complete'
-        data = {
-            'file_size': file_size,
-            'record_count': record_count,
-            'timestamp': int(time.time())
-        }
-        
-        response = self._make_request('POST', endpoint, json=data)
-        return response.json()
-    
     def get_schema_info(self, schema_slug: str) -> Dict[str, Any]:
         """
         Obtém informações sobre um schema.
