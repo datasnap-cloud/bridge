@@ -19,7 +19,7 @@ from sync.extractor import extract_mapping_data, test_source_connection
 from sync.jsonl_writer import JSONLBatchWriter, JSONLFileInfo
 from sync.metrics import get_metrics_collector
 from sync.token_cache import TokenCache
-from sync.uploader import BatchUploader, UploadProgress
+from sync.uploader import BatchUploader, UploadProgress, cleanup_uploaded_files
 
 
 @dataclass
@@ -225,6 +225,13 @@ class SyncRunner:
         except Exception as e:
             error_msg = str(e)
             self.logger.error(f"Erro na sincronização do mapeamento {mapping_name}: {error_msg}")
+            
+            # Limpar arquivos temporários em caso de erro
+            try:
+                self.logger.info(f"🧹 Limpando arquivos temporários após erro...")
+                self._cleanup_temp_files_for_mapping(mapping_name)
+            except Exception as cleanup_error:
+                self.logger.warning(f"⚠️ Erro durante limpeza de arquivos temporários: {cleanup_error}")
             
             self.state_store.finish_sync_error(mapping_name, error_msg)
             self.metrics.finish_sync_metrics(success=False, error_message=error_msg)
@@ -536,12 +543,53 @@ class SyncRunner:
             else:
                 self.logger.warning(f"⚠️ {len(failed_uploads)} upload(s) falharam para {mapping_name}")
             
+            # Limpar arquivos temporários após upload (sucesso ou falha)
+            try:
+                self.logger.info(f"🧹 Limpando arquivos temporários...")
+                cleanup_uploaded_files(results, keep_failed=False)  # Remove todos os arquivos, incluindo os que falharam
+            except Exception as e:
+                self.logger.warning(f"⚠️ Erro durante limpeza de arquivos temporários: {e}")
+            
             return len(failed_uploads) == 0
             
         except Exception as e:
             self.logger.error(f"💥 Erro durante processo de upload para {mapping_name}: {e}")
             return False
     
+    def _cleanup_temp_files_for_mapping(self, mapping_name: str) -> None:
+        """
+        Limpa arquivos temporários específicos de um mapeamento.
+        
+        Args:
+            mapping_name: Nome do mapeamento
+        """
+        try:
+            uploads_dir = self.paths.uploads_dir
+            if not uploads_dir.exists():
+                return
+            
+            # Procura por arquivos que começam com o nome do mapeamento
+            pattern = f"{mapping_name}_*"
+            files_to_remove = list(uploads_dir.glob(pattern))
+            
+            removed_count = 0
+            for file_path in files_to_remove:
+                try:
+                    if file_path.is_file():
+                        file_path.unlink()
+                        removed_count += 1
+                        self.logger.debug(f"Arquivo temporário removido: {file_path.name}")
+                except Exception as e:
+                    self.logger.warning(f"Erro ao remover arquivo {file_path.name}: {e}")
+            
+            if removed_count > 0:
+                self.logger.info(f"🧹 Limpeza concluída: {removed_count} arquivos temporários removidos para {mapping_name}")
+            else:
+                self.logger.debug(f"Nenhum arquivo temporário encontrado para {mapping_name}")
+                
+        except Exception as e:
+            self.logger.warning(f"Erro durante limpeza de arquivos temporários para {mapping_name}: {e}")
+
     def _update_watermark(self, mapping_config: Dict, records: List[Dict]) -> None:
         """Atualiza o watermark no arquivo de configuração após sincronização bem-sucedida."""
         try:
