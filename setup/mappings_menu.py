@@ -352,6 +352,19 @@ def _configure_mapping(datasource: Dict[str, Any], table: str, api_key_name: str
     print("   Recomendado: usar a chave primária em ordem crescente")
     order_by = input(f"Ordenação [{default_order}]: ").strip() or default_order
     
+    # min_records_for_upload
+    print("💡 Número mínimo de registros para upload: define quantos registros devem ser encontrados")
+    print("   para que o upload seja realizado. Se menos registros forem encontrados,")
+    print("   a sincronização será pulada. Use 0 para sempre fazer upload (padrão)")
+    print("   Exemplo: 100 = só faz upload se encontrar pelo menos 100 registros")
+    min_records_input = input("Número mínimo de registros para upload [0]: ").strip()
+    try:
+        min_records_for_upload = int(min_records_input) if min_records_input else 0
+        if min_records_for_upload < 0:
+            min_records_for_upload = 0
+    except ValueError:
+        min_records_for_upload = 0
+    
     # Confirmar exclusão se delete_after_upload
     delete_safety_enabled = False
     if delete_after and pk_column:
@@ -380,6 +393,7 @@ def _configure_mapping(datasource: Dict[str, Any], table: str, api_key_name: str
             "initial_watermark": initial_watermark,
             "batch_size": batch_size,
             "order_by": order_by,
+            "min_records_for_upload": min_records_for_upload,
             "delete_after_upload": delete_after,
             "delete_safety": {
                 "enabled": delete_safety_enabled,

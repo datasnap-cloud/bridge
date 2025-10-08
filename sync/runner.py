@@ -146,6 +146,23 @@ class SyncRunner:
                     duration_seconds=timer.elapsed()
                 )
             
+            # Verificar número mínimo de registros para upload
+            min_records_for_upload = mapping_config.get('transfer', {}).get('min_records_for_upload', 0)
+            records_count = len(records)
+            
+            if min_records_for_upload > 0 and records_count < min_records_for_upload:
+                self.logger.info(f"📊 Registros encontrados: {records_count}")
+                self.logger.info(f"📋 Mínimo necessário: {min_records_for_upload}")
+                self.logger.warning(f"⚠️  Upload cancelado: número de registros ({records_count}) é menor que o mínimo configurado ({min_records_for_upload})")
+                return SyncResult(
+                    mapping_name=mapping_name,
+                    success=True,
+                    duration_seconds=timer.elapsed(),
+                    message=f"Upload cancelado: {records_count} registros encontrados, mínimo necessário: {min_records_for_upload}"
+                )
+            
+            self.logger.info(f"✅ Validação de número mínimo passou: {records_count} registros (mínimo: {min_records_for_upload})")
+            
             # Escrever arquivos JSONL
             self.logger.info(f"📝 Escrevendo arquivos JSONL...")
             jsonl_files = await self._write_jsonl_files(mapping_name, records)

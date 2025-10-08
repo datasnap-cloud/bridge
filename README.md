@@ -196,10 +196,24 @@ Os mapeamentos definem como os dados são extraídos e enviados para a DataSnap:
   "transfer": {
     "batch_size": 10000,
     "max_file_size_mb": 100,
-    "retry_attempts": 3
+    "retry_attempts": 3,
+    "min_records_for_upload": 0
   },
   "query": "SELECT * FROM user_events WHERE created_at > '2024-01-01'"
 }
+```
+
+#### Configurações de Transfer
+
+A seção `transfer` contém configurações específicas para o processo de sincronização:
+
+- **`batch_size`** (padrão: 5000): Número de registros processados por lote
+- **`max_file_size_mb`** (padrão: 100): Tamanho máximo dos arquivos JSONL em MB
+- **`retry_attempts`** (padrão: 3): Número de tentativas em caso de falha no upload
+- **`min_records_for_upload`** (padrão: 0): Número mínimo de registros necessários para realizar o upload
+  - Se o número de registros extraídos for menor que este valor, o upload será cancelado
+  - Útil para evitar uploads desnecessários quando há poucos dados novos
+  - Valor 0 significa que o upload sempre será realizado, independente da quantidade de registros
 ```
 
 ### Variáveis de Ambiente

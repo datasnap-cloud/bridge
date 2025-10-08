@@ -1,6 +1,6 @@
 """
 Módulo para extração de dados das fontes.
-Suporta diferentes tipos de fontes de dados (SQL Server, PostgreSQL, MySQL, etc.).
+Suporta diferentes tipos de fontes de dados (SQL Server, PostgreSQL, MySQL, SQLite, etc.).
 """
 
 import json
@@ -30,6 +30,12 @@ try:
     PYMYSQL_AVAILABLE = True
 except ImportError:
     PYMYSQL_AVAILABLE = False
+
+try:
+    import sqlite3
+    SQLITE3_AVAILABLE = True
+except ImportError:
+    SQLITE3_AVAILABLE = False
 
 from core.timeutil import get_current_timestamp, format_duration
 from core.datasources_store import DataSourcesStore
@@ -65,7 +71,7 @@ def _resolve_source_config(mapping_config: Dict[str, Any]) -> Optional[Dict[str,
             if datasource.name == connection_ref:
                 # Converte a datasource para um dicionário de configuração
                 config = {
-                    'type': datasource.conn.type if hasattr(datasource.conn, 'type') else datasource.type,
+                    'type': datasource.type,  # Usar sempre datasource.type
                     'host': datasource.conn.host,
                     'port': datasource.conn.port,
                     'database': datasource.conn.database,
@@ -599,13 +605,134 @@ class MySQLExtractor(DataExtractor):
             raise
 
 
+class SQLiteExtractor(DataExtractor):
+    """Extrator para SQLite."""
+    
+    def __init__(self, config: Dict[str, Any]):
+        super().__init__(config)
+        if not SQLITE3_AVAILABLE:
+            raise ImportError("sqlite3 não está disponível")
+    
+    def connect(self) -> bool:
+        """Estabelece conexão com SQLite."""
+        try:
+            # Tenta diferentes formas de obter o caminho do banco
+            database_path = None
+            
+            # Primeiro tenta connection.database (formato padrão)
+            if 'connection' in self.config and 'database' in self.config['connection']:
+                database_path = self.config['connection']['database']
+            # Depois tenta database diretamente
+            elif 'database' in self.config:
+                database_path = self.config['database']
+            # Por último tenta path
+            elif 'path' in self.config:
+                database_path = self.config['path']
+            
+            if not database_path:
+                logger.error("❌ Caminho do banco SQLite não especificado")
+                return False
+            
+            logger.debug(f"🔌 Conectando ao SQLite: {database_path}")
+            
+            self.connection = sqlite3.connect(database_path)
+            self.connection.row_factory = sqlite3.Row  # Para acessar colunas por nome
+            
+            logger.info(f"✅ Conectado ao SQLite: {database_path}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Erro ao conectar SQLite: {e}")
+            return False
+    
+    def disconnect(self) -> None:
+        """Fecha conexão com SQLite."""
+        if self.connection:
+            self.connection.close()
+            self.connection = None
+    
+    def test_connection(self) -> bool:
+        """Testa conexão com SQLite."""
+        try:
+            if not self.connection:
+                return False
+            
+            cursor = self.connection.cursor()
+            cursor.execute("SELECT 1")
+            cursor.fetchone()
+            cursor.close()
+            return True
+            
+        except Exception as e:
+            logger.error(f"Erro no teste de conexão SQLite: {e}")
+            return False
+    
+    def extract_data(self, query: str, batch_size: int = 1000) -> Iterator[List[Dict[str, Any]]]:
+        """Extrai dados do SQLite."""
+        logger.debug(f"🔍 Iniciando extração SQLite com query: {query}")
+        logger.debug(f"📊 Batch size configurado: {batch_size}")
+        
+        if not self.connection:
+            logger.error("❌ Conexão SQLite não estabelecida")
+            raise RuntimeError("Conexão não estabelecida")
+        
+        try:
+            cursor = self.connection.cursor()
+            logger.debug("🔄 Executando query SQLite...")
+            cursor.execute(query)
+            logger.debug("✅ Query executada com sucesso")
+            
+            batch_count = 0
+            total_records = 0
+            
+            while True:
+                rows = cursor.fetchmany(batch_size)
+                if not rows:
+                    logger.debug(f"📋 Extração concluída: {batch_count} batches, {total_records} registros totais")
+                    break
+                
+                batch_count += 1
+                batch_size_actual = len(rows)
+                total_records += batch_size_actual
+                
+                logger.debug(f"📦 Processando batch {batch_count}: {batch_size_actual} registros")
+                
+                # Converte sqlite3.Row para dicionários
+                batch = []
+                for row in rows:
+                    record = {}
+                    for key in row.keys():
+                        value = row[key]
+                        
+                        # Converte tipos especiais
+                        if hasattr(value, 'isoformat'):  # datetime
+                            value = value.isoformat()
+                        elif isinstance(value, bytes):
+                            value = value.decode('utf-8', errors='ignore')
+                        
+                        record[key] = value
+                    
+                    batch.append(record)
+                
+                logger.debug(f"✅ Batch {batch_count} processado e convertido")
+                yield batch
+                
+        except Exception as e:
+            logger.error(f"❌ Erro durante extração SQLite: {e}")
+            raise
+        finally:
+            if cursor:
+                cursor.close()
+
+
 class ExtractorFactory:
     """Factory para criar extratores baseados no tipo de fonte."""
     
     EXTRACTORS = {
         'sqlserver': SQLServerExtractor,
         'postgresql': PostgreSQLExtractor,
-        'mysql': MySQLExtractor
+        'mysql': MySQLExtractor,
+        'sqlite': SQLiteExtractor
     }
     
     @classmethod
