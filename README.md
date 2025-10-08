@@ -48,10 +48,10 @@ pip install -r requirements.txt
 #### 4. Configuração inicial
 ```bash
 # Execute o setup interativo
-python -m bridge setup
+python cli.py setup
 
 # Ou verifique o status
-python -m bridge status
+python cli.py status
 ```
 
 ### Dependências Principais
@@ -68,9 +68,7 @@ O Bridge utiliza as seguintes bibliotecas principais:
 
 ```
 datasnap-bridge/
-├── bridge/                 # Módulo principal
-│   ├── __main__.py        # Entry point CLI
-│   └── cli.py             # Comandos CLI
+├── cli.py                  # Ponto de entrada principal do CLI
 ├── core/                  # Funcionalidades core
 │   ├── crypto.py          # Criptografia e segurança
 │   ├── datasources_store.py # Gerenciamento de fontes
@@ -99,7 +97,7 @@ datasnap-bridge/
 ### 1. Configuração Inicial
 ```bash
 # Execute o menu de configuração
-python -m bridge setup
+python cli.py setup
 
 # Siga os passos:
 # 1. Cadastre sua API Key da DataSnap
@@ -110,13 +108,13 @@ python -m bridge setup
 ### 2. Primeira Sincronização
 ```bash
 # Verifique o status do sistema
-python -m bridge status
+python cli.py status
 
 # Execute uma sincronização de teste
-python -m bridge sync --dry-run
+python cli.py sync --dry-run --all
 
 # Execute sincronização real
-python -m bridge sync
+python cli.py sync --all
 ```
 
 ### 3. Monitoramento
@@ -138,11 +136,11 @@ As API Keys da DataSnap são armazenadas de forma criptografada em `.bridge/api_
 
 ```bash
 # Adicionar nova API Key via menu
-python -m bridge setup
+python cli.py setup
 # Selecione: "Gerenciar API Keys" > "Cadastrar nova API Key"
 
 # Listar API Keys cadastradas
-python -m bridge setup
+python cli.py setup
 # Selecione: "Gerenciar API Keys" > "Listar API Keys"
 ```
 
@@ -238,7 +236,7 @@ export BRIDGE_DRY_RUN=true
 
 O Bridge oferece os seguintes comandos CLI:
 
-### `bridge sync`
+### `python cli.py sync`
 Executa a sincronização de dados de acordo com os mapeamentos configurados.
 
 Este comando realiza a extração, transformação e carregamento (ETL) de dados das fontes configuradas para a DataSnap:
@@ -250,23 +248,32 @@ Este comando realiza a extração, transformação e carregamento (ETL) de dados
 
 #### Opções disponíveis:
 ```bash
-# Sincronizar um mapeamento específico
-python -m bridge sync mapping_name
+# Sincronizar mapeamentos específicos
+python cli.py sync --mapping mapping_name
 
 # Sincronizar múltiplos mapeamentos
-python -m bridge sync mapping1 mapping2 mapping3
+python cli.py sync --mapping mapping1 --mapping mapping2
 
 # Sincronizar todos os mapeamentos disponíveis
-python -m bridge sync --all
+python cli.py sync --all
 
 # Execução em modo dry-run (sem upload)
-python -m bridge sync --dry-run mapping_name
+python cli.py sync --dry-run --all
 
 # Forçar sincronização completa (ignorar estado anterior)
-python -m bridge sync --force mapping_name
+python cli.py sync --force --all
 
 # Execução sequencial (não paralela)
-python -m bridge sync --no-parallel mapping1 mapping2
+python cli.py sync --sequential --all
+
+# Mostrar apenas o status das sincronizações
+python cli.py sync --status
+
+# Configurar número de workers paralelos
+python cli.py sync --workers 8 --all
+
+# Configurar tamanho do lote de registros
+python cli.py sync --batch-size 5000 --all
 ```
 
 #### Configuração de Mapeamentos
@@ -297,10 +304,10 @@ Os mapeamentos são definidos em arquivos JSON na pasta `.bridge/config/mappings
 - **Suporte a retry automático** em caso de falhas temporárias
 
 ```bash
-python -m bridge sync
+python cli.py sync --all
 ```
 
-### `bridge setup`
+### `python cli.py setup`
 Menu interativo para configurar API Keys, Fontes de Dados e consultar Schemas da DataSnap.
 
 Este comando abre um menu TUI (Terminal User Interface) que permite:
@@ -318,10 +325,10 @@ Este comando abre um menu TUI (Terminal User Interface) que permite:
 Todos os dados sensíveis são criptografados com AES-GCM e armazenados localmente.
 
 ```bash
-python -m bridge setup
+python cli.py setup
 ```
 
-### `bridge status`
+### `python cli.py status`
 Exibe o status do sistema e conectividade com a API DataSnap.
 
 Mostra informações sobre:
@@ -330,14 +337,14 @@ Mostra informações sobre:
 - **Informações do sistema**
 
 ```bash
-python -m bridge status
+python cli.py status
 ```
 
-### `bridge version`
+### `python cli.py version`
 Exibe informações sobre a versão atual do Bridge.
 
 ```bash
-python -m bridge version
+python cli.py version
 ```
 
 ---
@@ -356,20 +363,20 @@ crontab -e
 #### 2. Adicionar a linha de agendamento
 ```bash
 # Executar sincronização a cada 5 minutos
-*/5 * * * * /usr/bin/env bash -lc 'cd /opt/datasnap-bridge && venv/bin/bridge sync >> .bridge/logs/sync.log 2>&1'
+*/5 * * * * /usr/bin/env bash -lc 'cd /opt/datasnap-bridge && python cli.py sync --all >> .bridge/logs/sync.log 2>&1'
 
 # Executar sincronização diariamente às 02:00
-0 2 * * * /usr/bin/env bash -lc 'cd /opt/datasnap-bridge && venv/bin/bridge sync --all >> .bridge/logs/sync.log 2>&1'
+0 2 * * * /usr/bin/env bash -lc 'cd /opt/datasnap-bridge && python cli.py sync --all >> .bridge/logs/sync.log 2>&1'
 
 # Executar sincronização a cada hora
-0 * * * * /usr/bin/env bash -lc 'cd /opt/datasnap-bridge && venv/bin/bridge sync >> .bridge/logs/sync.log 2>&1'
+0 * * * * /usr/bin/env bash -lc 'cd /opt/datasnap-bridge && python cli.py sync --all >> .bridge/logs/sync.log 2>&1'
 ```
 
 #### 3. Explicação dos componentes:
 - **`*/5 * * * *`** - A cada 5 minutos
 - **`/usr/bin/env bash -lc`** - Executa bash com perfil completo carregado
 - **`cd /opt/datasnap-bridge`** - Navega para o diretório do Bridge
-- **`venv/bin/bridge sync`** - Executa o comando de sincronização
+- **`python cli.py sync --all`** - Executa o comando de sincronização
 - **`>> .bridge/logs/sync.log 2>&1`** - Redireciona logs para arquivo
 
 ### Configurações Recomendadas
@@ -377,16 +384,16 @@ crontab -e
 #### Para ambientes de produção:
 ```bash
 # Sincronização incremental a cada 15 minutos
-*/15 * * * * /usr/bin/env bash -lc 'cd /opt/datasnap-bridge && venv/bin/bridge sync >> .bridge/logs/sync.log 2>&1'
+*/15 * * * * /usr/bin/env bash -lc 'cd /opt/datasnap-bridge && python cli.py sync --all >> .bridge/logs/sync.log 2>&1'
 
 # Sincronização completa diária (com --force)
-0 3 * * * /usr/bin/env bash -lc 'cd /opt/datasnap-bridge && venv/bin/bridge sync --all --force >> .bridge/logs/sync-full.log 2>&1'
+0 3 * * * /usr/bin/env bash -lc 'cd /opt/datasnap-bridge && python cli.py sync --all --force >> .bridge/logs/sync-full.log 2>&1'
 ```
 
 #### Para ambientes de desenvolvimento:
 ```bash
 # Sincronização a cada hora durante horário comercial
-0 9-18 * * 1-5 /usr/bin/env bash -lc 'cd /opt/datasnap-bridge && venv/bin/bridge sync >> .bridge/logs/sync.log 2>&1'
+0 9-18 * * 1-5 /usr/bin/env bash -lc 'cd /opt/datasnap-bridge && python cli.py sync --all >> .bridge/logs/sync.log 2>&1'
 ```
 
 ### Monitoramento dos Logs
@@ -425,7 +432,7 @@ BRIDGE_LOG_LEVEL=INFO
 BRIDGE_CONFIG_DIR=/opt/datasnap-bridge/.bridge
 
 # Cron job com configurações específicas
-*/5 * * * * /usr/bin/env bash -lc 'export BRIDGE_LOG_LEVEL=DEBUG && cd /opt/datasnap-bridge && venv/bin/bridge sync >> .bridge/logs/sync.log 2>&1'
+*/5 * * * * /usr/bin/env bash -lc 'export BRIDGE_LOG_LEVEL=DEBUG && cd /opt/datasnap-bridge && python cli.py sync --all >> .bridge/logs/sync.log 2>&1'
 ```
 
 ### Verificação do Status
@@ -441,6 +448,19 @@ sudo tail -f /var/log/cron
 
 # Listar cron jobs ativos
 crontab -l
+```
+
+Para verificar se as sincronizações estão funcionando:
+
+```bash
+# Verificar status geral
+python cli.py status
+
+# Verificar logs de sincronização
+tail -f .bridge/logs/sync.log
+
+# Verificar última execução
+python cli.py sync --status
 ```
 
 ---
