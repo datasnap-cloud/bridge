@@ -92,7 +92,230 @@ datasnap-bridge/
 
 ---
 
-## 🏁 Começo rápido
+## 🏁 Início Rápido: Da Tabela ao Schema
+
+Este guia mostra como conectar uma tabela do seu banco de dados à DataSnap em **5 passos simples**.
+
+### Pré-requisitos
+- Banco de dados MySQL ou PostgreSQL com dados
+- API Key da DataSnap
+- Python 3.9+ instalado
+
+### Passo 1: Configuração Inicial
+```bash
+# Execute o menu de configuração
+python cli.py setup
+```
+
+No menu interativo:
+1. **Selecione "Gerenciar API Keys"** → "Cadastrar nova API Key"
+2. **Cole sua API Key da DataSnap** (será validada automaticamente)
+3. **Confirme o cadastro**
+
+### Passo 2: Conectar Banco de Dados
+No mesmo menu `python cli.py setup`:
+
+1. **Selecione "Gerenciar Fontes de Dados"** → "Cadastrar nova fonte"
+2. **Escolha o tipo**: MySQL ou PostgreSQL
+3. **Preencha os dados de conexão**:
+   ```
+   Nome da fonte: meu_banco
+   Host: localhost (ou IP do servidor)
+   Porta: 3306 (MySQL) ou 5432 (PostgreSQL)
+   Database: nome_do_banco
+   Usuário: seu_usuario
+   Senha: sua_senha
+   ```
+4. **Teste a conexão** (será validada antes de salvar)
+5. **Confirme o cadastro**
+
+### Passo 3: Cadastrar Tabela
+Ainda no menu:
+
+1. **Selecione "Gerenciar Fontes de Dados"** → "Cadastrar tabelas de uma fonte"
+2. **Escolha a fonte** criada no passo anterior
+3. **Digite o nome da tabela** que deseja sincronizar
+4. **Confirme o cadastro**
+
+### Passo 4: Consultar Schema da DataSnap
+Para vincular sua tabela a um schema existente:
+
+1. **Selecione "Consultar Schemas da API"**
+2. **Visualize os schemas disponíveis** na sua conta DataSnap
+3. **Anote o nome do schema** que deseja usar
+
+### Passo 5: Criar Mapeamento
+
+#### 🎯 Método Recomendado: Menu Interativo
+A forma mais fácil e rápida é usar o menu interativo:
+
+```bash
+python cli.py setup
+# Escolha a opção "4. Vincular Tabelas → Schemas"
+```
+
+O menu irá guiá-lo através de:
+1. **Seleção da fonte de dados** (cadastrada no Passo 2)
+2. **Seleção da tabela** (descoberta automaticamente)
+3. **Seleção da API Key** (cadastrada no Passo 1)
+4. **Seleção do schema** (listado da DataSnap)
+5. **Configuração automática** com detecção de chave primária
+6. **Salvamento automático** do arquivo de mapeamento
+
+**Vantagens do menu interativo**:
+- ✅ Detecção automática da chave primária
+- ✅ Validação em tempo real
+- ✅ Explicações detalhadas de cada campo
+- ✅ Criação automática do arquivo JSON
+- ✅ Configurações de segurança guiadas
+
+#### 📝 Método Alternativo: Arquivo Manual
+Se preferir criar o arquivo manualmente:
+
+```bash
+# Navegue até a pasta de mapeamentos
+cd .bridge/config/mappings
+```
+
+Crie um arquivo `meu_banco.usuarios.json`:
+```json
+{
+  "version": 1,
+  "source": {
+    "name": "meu_banco",
+    "type": "mysql",
+    "connection_ref": "meu_banco"
+  },
+  "table": "usuarios",
+  "schema": {
+    "id": 5,
+    "name": "Usuários do Sistema",
+    "slug": "usuarios-sistema",
+    "token_ref": "datasnap"
+  },
+  "transfer": {
+    "incremental_mode": "incremental_pk",
+    "pk_column": "id",
+    "timestamp_column": "updated_at",
+    "initial_watermark": "0",
+    "batch_size": 1000,
+    "order_by": "id ASC",
+    "delete_after_upload": false,
+    "delete_safety": {
+      "enabled": true,
+      "where_column": "status"
+    },
+    "min_records_for_upload": 1
+  },
+  "notes": "Sincronização de usuários - criado manualmente"
+}
+```
+
+**Explicação dos campos principais**:
+- `source.name`: Nome da fonte de dados cadastrada
+- `table`: Nome da tabela no banco
+- `schema.id`: ID do schema na DataSnap (obtido no Passo 4)
+- `schema.name`: Nome do schema na DataSnap
+- `incremental_mode`: Tipo de sincronização (`incremental_pk` para chave primária)
+- `pk_column`: Coluna de chave primária
+- `timestamp_column`: Coluna de timestamp para controle incremental
+- `delete_after_upload`: Se deve deletar dados após upload ⚠️
+- `min_records_for_upload`: Mínimo de registros para fazer upload
+
+### Passo 6: Testar Sincronização
+Após criar o mapeamento (pelo menu ou manualmente):
+
+```bash
+# Se ainda estiver no menu, saia (Ctrl+C ou opção "Sair")
+# Volte para a pasta principal se necessário
+cd ../../..
+
+# Teste sem fazer upload real
+python cli.py sync --dry-run --mapping meu_banco.usuarios
+
+# Se tudo estiver OK, execute a sincronização
+python cli.py sync --mapping meu_banco.usuarios
+```
+
+**Exemplo de saída esperada**:
+```
+✅ Processando mapeamento: meu_banco.usuarios
+📊 Extraídos 150 registros da tabela usuarios
+📤 Enviando dados para schema 'Usuários do Sistema'
+✅ Upload concluído: 1 arquivo, 150 registros
+⏱️  Tempo total: 2.3s
+```
+
+### Passo 7: Verificar Resultados
+Após a sincronização, verifique se os dados chegaram na DataSnap:
+
+1. **Acesse o painel da DataSnap**
+2. **Vá para o schema "Usuários do Sistema"**
+3. **Verifique se os dados foram importados**
+
+Você também pode verificar o status local:
+```bash
+python cli.py status
+
+# Veja os logs
+tail -f .bridge/logs/sync.log
+```
+
+### 🔄 Automatização (Opcional)
+Para sincronizar automaticamente, configure um cron job:
+
+```bash
+# Editar crontab
+crontab -e
+
+# Adicionar linha para sincronizar a cada hora
+0 * * * * cd /caminho/para/datasnap-bridge && python cli.py sync --all
+```
+
+## 💡 Dicas Importantes
+
+### ⚠️ Cuidados com `delete_after_upload`
+- **`true`**: Deleta dados da tabela após upload (use apenas para logs/dados temporários)
+- **`false`**: Mantém dados na tabela (recomendado para dados importantes)
+
+### 🔧 Configurações de Performance
+- **`batch_size`**: Quantidade de registros por lote (padrão: 1000)
+- **`min_records_for_upload`**: Mínimo para fazer upload (evita uploads desnecessários)
+- **`incremental_mode`**: 
+  - `incremental_pk`: Usa chave primária para controle
+  - `incremental_timestamp`: Usa timestamp para controle
+
+### 🐛 Resolução de Problemas
+```bash
+# Ver logs detalhados
+python cli.py sync --mapping meu_banco.usuarios --verbose
+
+# Testar conexão
+python cli.py setup  # Opção "Testar conexões"
+
+# Verificar configuração
+python cli.py status
+```
+
+---
+
+**🎉 Pronto! Sua tabela está sincronizada com a DataSnap!**
+
+Para mais detalhes, consulte a documentação completa abaixo.
+
+---
+
+## 🔄 Sincronização Automática
+
+Para automatizar, adicione ao cron:
+```bash
+# A cada 15 minutos
+*/15 * * * * cd /caminho/para/datasnap-bridge && python cli.py sync --all >> .bridge/logs/sync.log 2>&1
+```
+
+---
+
+## 🏁 Começo rápido (resumo)
 
 ### 1. Configuração Inicial
 ```bash
