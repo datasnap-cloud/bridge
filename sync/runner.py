@@ -158,7 +158,7 @@ class SyncRunner:
                     mapping_name=mapping_name,
                     success=True,
                     duration_seconds=timer.elapsed(),
-                    message=f"Upload cancelado: {records_count} registros encontrados, mínimo necessário: {min_records_for_upload}"
+                    error_message=f"Upload cancelado: {records_count} registros encontrados, mínimo necessário: {min_records_for_upload}"
                 )
             
             self.logger.info(f"✅ Validação de número mínimo passou: {records_count} registros (mínimo: {min_records_for_upload})")
