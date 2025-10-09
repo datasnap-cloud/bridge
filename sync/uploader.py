@@ -286,14 +286,21 @@ class FileUploader:
             
             if token_info:
                 logger.info(f"✅ Token obtido com sucesso!")
-                logger.debug(f"📋 Token ID: {token_info.get('upload_id', 'N/A')}")
+                logger.debug(f"📋 Token ID: {token_info.get('id', 'N/A')}")
                 logger.debug(f"🔗 Upload URL: {token_info.get('upload_url', 'N/A')[:50]}...")
                 logger.debug(f"⏰ Token válido até: {token_info.get('expires_at', 'N/A')}")
                 
+                # Normaliza a resposta da API para compatibilidade interna
+                normalized_token = {
+                    'upload_id': token_info.get('id'),
+                    'upload_url': token_info.get('upload_url'),
+                    'expires_at': token_info.get('expires_at')
+                }
+                
                 # Armazena no cache
-                self.token_cache.store_token(schema_slug, mapping_name, token_info)
+                self.token_cache.store_token(schema_slug, mapping_name, normalized_token)
                 logger.debug(f"💾 Token armazenado no cache para {schema_slug}")
-                return token_info
+                return normalized_token
             else:
                 logger.error(f"❌ API retornou token vazio para schema: {schema_slug}")
             
