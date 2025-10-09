@@ -45,7 +45,7 @@ def run_mappings_menu() -> None:
     
     # 6. Salvar mapeamento
     if _save_mapping(mapping_config):
-        show_success_message(f"✅ Vínculo salvo em .bridge/mappings/{datasource['name']}.{table}.json")
+        show_success_message(f"✅ Vínculo salvo em .bridge/config/mappings/{datasource['name']}.{table}.json")
 
 
 def _select_datasource() -> Optional[Dict[str, Any]]:
@@ -415,7 +415,7 @@ def _save_mapping(mapping_config: Dict[str, Any]) -> bool:
         table_name = mapping_config['table']
         
         # Caminho do arquivo de mapeamento
-        mappings_dir = os.path.join(get_bridge_config_dir(), "mappings")
+        mappings_dir = os.path.join(get_bridge_config_dir(), "config", "mappings")
         mapping_file = os.path.join(mappings_dir, f"{source_name}.{table_name}.json")
         
         # Salvar arquivo
@@ -477,7 +477,7 @@ def _ensure_mapping_directories() -> None:
     bridge_dir = get_bridge_config_dir()
     
     directories = [
-        os.path.join(bridge_dir, "mappings"),
+        os.path.join(bridge_dir, "config", "mappings"),
         os.path.join(bridge_dir, "mappings_state"),
         os.path.join(bridge_dir, "models")
     ]
