@@ -218,21 +218,29 @@ class SyncRunner:
             if total_records > 0:
                 self._update_watermark(mapping_config, records)
             
-            # Atualizar estado
-            self.state_store.finish_sync_success(
-                mapping_name, 
-                total_records
-            )
+            # Determinar se a sincronização foi bem-sucedida
+            sync_success = upload_success or self.config.dry_run  # Dry-run sempre é considerado sucesso
             
-            self.metrics.finish_sync_metrics(success=True)
+            # Atualizar estado baseado no resultado do upload
+            if sync_success:
+                self.state_store.finish_sync_success(
+                    mapping_name, 
+                    total_records
+                )
+            else:
+                self.state_store.finish_sync_error(mapping_name, "Falha no upload de arquivos")
+            
+            self.metrics.finish_sync_metrics(success=sync_success, 
+                                           error_message=None if sync_success else "Falha no upload de arquivos")
             
             result = SyncResult(
                 mapping_name=mapping_name,
-                success=True,
+                success=sync_success,
                 records_processed=total_records,
                 files_created=files_created,
                 files_uploaded=files_uploaded,
-                duration_seconds=timer.elapsed()
+                duration_seconds=timer.elapsed(),
+                error_message=None if sync_success else "Falha no upload de arquivos"
             )
             
             self.logger.info(
