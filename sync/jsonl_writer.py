@@ -12,12 +12,22 @@ from dataclasses import dataclass
 import time
 import hashlib
 from contextlib import contextmanager
+from decimal import Decimal
 
 from core.paths import BridgePaths
 from core.timeutil import get_current_timestamp, format_duration
 
 
 logger = logging.getLogger(__name__)
+
+
+class DecimalEncoder(json.JSONEncoder):
+    """Encoder JSON personalizado para lidar com objetos Decimal."""
+    
+    def default(self, obj):
+        if isinstance(obj, Decimal):
+            return float(obj)
+        return super().default(obj)
 
 
 @dataclass
@@ -168,8 +178,8 @@ class JSONLWriter:
             raise RuntimeError("Arquivo não está aberto")
         
         try:
-            # Serializa o registro
-            json_line = json.dumps(record, ensure_ascii=False, separators=(',', ':'))
+            # Serializa o registro usando o encoder personalizado
+            json_line = json.dumps(record, ensure_ascii=False, separators=(',', ':'), cls=DecimalEncoder)
             
             # Escreve no arquivo
             self.file_handle.write(json_line + '\n')
