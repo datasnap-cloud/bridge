@@ -365,7 +365,7 @@ def _show_data_flow() -> None:
         import glob
         from core.paths import get_bridge_config_dir
         
-        mappings_dir = os.path.join(get_bridge_config_dir(), "mappings")
+        mappings_dir = os.path.join(get_bridge_config_dir(), "config", "mappings")
         
         if not os.path.exists(mappings_dir):
             return
