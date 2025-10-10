@@ -272,11 +272,11 @@ class FileUploader:
                 logger.debug(f"✅ Token encontrado no cache para {schema_slug}")
                 # Converte CachedToken para dict para compatibilidade
                 token_dict = {
-                    'upload_id': cached_token.token_id,
+                    'token_id': cached_token.token_id,
                     'upload_url': cached_token.upload_url,
                     'expires_at': cached_token.expires_at
                 }
-                logger.debug(f"📋 Token ID: {token_dict.get('upload_id', 'N/A')}")
+                logger.debug(f"📋 Token ID: {token_dict.get('token_id', 'N/A')}")
                 logger.debug(f"🔗 Upload URL: {token_dict.get('upload_url', 'N/A')[:50]}...")
                 return token_dict
             
@@ -292,7 +292,7 @@ class FileUploader:
                 
                 # Normaliza a resposta da API para compatibilidade interna
                 normalized_token = {
-                    'upload_id': token_info.get('id'),
+                    'token_id': token_info.get('id'),
                     'upload_url': token_info.get('upload_url'),
                     'expires_at': token_info.get('expires_at')
                 }
@@ -324,7 +324,7 @@ class FileUploader:
         """
         try:
             upload_url = token_info['upload_url']
-            upload_id = token_info['upload_id']
+        upload_id = token_info['token_id']
             
             # Concatena o nome do arquivo JSONL à URL de upload
             if not upload_url.endswith('/'):
