@@ -324,7 +324,7 @@ class FileUploader:
         """
         try:
             upload_url = token_info['upload_url']
-        upload_id = token_info['token_id']
+            upload_id = token_info['token_id']
             
             # Concatena o nome do arquivo JSONL à URL de upload
             if not upload_url.endswith('/'):
