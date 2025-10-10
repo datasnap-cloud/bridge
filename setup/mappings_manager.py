@@ -48,7 +48,7 @@ def get_all_mappings() -> List[MappingInfo]:
     mappings = []
     
     try:
-        mappings_dir = os.path.join(get_bridge_config_dir(), "mappings")
+        mappings_dir = os.path.join(get_bridge_config_dir(), "config", "mappings")
         
         if not os.path.exists(mappings_dir):
             return mappings
