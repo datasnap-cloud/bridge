@@ -514,16 +514,7 @@ def _register_tables_for_datasource(datasource: DataSource) -> None:
                 show_success_message(f"✅ Seleção salva! {len(selected_tables)} tabelas selecionadas.")
                 logger.info(f"📊 Tabelas salvas para {datasource.name}: {len(selected_tables)} tabelas")
                 
-                # Opção de gerar modelos JSONL
-                if selected_tables:
-                    choice = Prompt.ask(
-                        "\n[bold]Deseja gerar modelos JSONL para as tabelas selecionadas?[/bold]",
-                        choices=["s", "n"],
-                        default="s"
-                    ).strip().lower()
-                    
-                    if choice == 's':
-                        _generate_jsonl_models_for_datasource(datasource, selected_tables)
+                # Removido: opção de gerar modelos JSONL para as tabelas selecionadas
             else:
                 show_error_message("❌ Erro ao salvar seleção de tabelas.")
         else:
