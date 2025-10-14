@@ -144,6 +144,25 @@ class DeletionResult:
     deletion_time: float = 0.0
 
 
+def _format_order_by(order_by: Optional[str], default_column: Optional[str]) -> str:
+    """Retorna a cláusula ORDER BY normalizada.
+    - Se order_by já inclui 'ORDER BY', não duplica
+    - Se for um nome simples de coluna, aplica crase e ASC (MySQL-safe)
+    - Se não houver order_by, usa coluna padrão quando fornecida
+    """
+    if order_by and order_by.strip():
+        ob = order_by.strip().rstrip(';')
+        if ob.lower().startswith('order by'):
+            return ob
+        # coluna simples (sem espaços ou vírgulas)
+        if (' ' not in ob) and (',' not in ob):
+            return f"ORDER BY `{ob}` ASC"
+        return f"ORDER BY {ob}"
+    if default_column:
+        return f"ORDER BY `{default_column}` ASC"
+    return ""
+
+
 def build_sql_query(mapping_config: Dict[str, Any]) -> Optional[str]:
     """
     Constrói query SQL automaticamente baseada na configuração do mapeamento.
@@ -178,8 +197,8 @@ def build_sql_query(mapping_config: Dict[str, Any]) -> Optional[str]:
             # Modo completo: seleciona todos os registros
             query = f"SELECT * FROM `{table}`"
             if order_by:
-                query += f" ORDER BY {order_by}"
-                
+                query += f" {_format_order_by(order_by, None)}"
+        
         elif incremental_mode == 'incremental_pk':
             # Modo incremental por chave primária
             if not pk_column:
@@ -187,11 +206,9 @@ def build_sql_query(mapping_config: Dict[str, Any]) -> Optional[str]:
                 return None
             
             query = f"SELECT * FROM `{table}` WHERE `{pk_column}` > {initial_watermark}"
-            if order_by:
-                query += f" ORDER BY {order_by}"
-            else:
-                query += f" ORDER BY `{pk_column}` ASC"
-                
+            # Aplica ORDER BY normalizado, usando pk como padrão
+            query += f" {_format_order_by(order_by, pk_column)}"
+        
         elif incremental_mode == 'incremental_timestamp':
             # Modo incremental por timestamp
             if not timestamp_column:
@@ -199,11 +216,9 @@ def build_sql_query(mapping_config: Dict[str, Any]) -> Optional[str]:
                 return None
             
             query = f"SELECT * FROM `{table}` WHERE `{timestamp_column}` > '{initial_watermark}'"
-            if order_by:
-                query += f" ORDER BY {order_by}"
-            else:
-                query += f" ORDER BY `{timestamp_column}` ASC"
-                
+            # Aplica ORDER BY normalizado, usando timestamp como padrão
+            query += f" {_format_order_by(order_by, timestamp_column)}"
+        
         elif incremental_mode == 'custom_sql':
             # Modo SQL customizado - deve ter query definida
             logger.error("incremental_mode='custom_sql' requer query definida no mapeamento")
@@ -599,7 +614,6 @@ class MySQLExtractor(DataExtractor):
                     
                     logger.debug(f"✅ Batch {batch_count} processado e convertido")
                     yield batch
-                    
         except Exception as e:
             logger.error(f"❌ Erro durante extração MySQL: {e}")
             raise
@@ -716,7 +730,6 @@ class SQLiteExtractor(DataExtractor):
                 
                 logger.debug(f"✅ Batch {batch_count} processado e convertido")
                 yield batch
-                
         except Exception as e:
             logger.error(f"❌ Erro durante extração SQLite: {e}")
             raise
@@ -888,7 +901,14 @@ def extract_mapping_data(mapping_config: Dict[str, Any],
     except Exception as e:
         end_time = get_current_timestamp()
         error_msg = f"Erro na extração: {e}"
-        logger.error(f"❌ {error_msg}")
+        try:
+            failed_sql = query  # pode não existir se erro ocorrer antes
+        except NameError:
+            failed_sql = None
+        if failed_sql:
+            logger.error(f"❌ {error_msg}. SQL executado: {failed_sql}")
+        else:
+            logger.error(f"❌ {error_msg}")
         
         return ExtractionResult(
             success=False,
@@ -988,7 +1008,10 @@ def delete_records_after_upload(mapping_config: Dict[str, Any], record_ids: List
     except Exception as e:
         deletion_time = time.time() - start_time
         error_msg = f"Erro na deleção: {e}"
-        logger.error(f"❌ {error_msg}")
+        # Tentar logar a query e parâmetros
+        dq = delete_query if 'delete_query' in locals() else None
+        params = batch_ids if 'batch_ids' in locals() else None
+        logger.error(f"❌ {error_msg}. SQL executado: {dq} | params: {params}")
         
         return DeletionResult(
             success=False,
