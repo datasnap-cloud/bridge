@@ -829,7 +829,7 @@ def extract_mapping_data(mapping_config: Dict[str, Any],
         logger.info(f"🗄️ Fonte de dados: {source_type.upper()}")
         
         if source_type == 'laravel_log':
-            records = _extract_laravel_log_records(mapping_config)
+            records = _extract_laravel_log_records(source_config)
             # Se houver erro, _extract_laravel_log_records lançará exceção que será capturada abaixo
             
             end_time = get_current_timestamp()
@@ -1088,13 +1088,12 @@ def test_source_connection(source_config: Dict[str, Any]) -> Tuple[bool, str]:
         return False, f"Erro ao testar conexão: {e}"
 
 
-def _extract_laravel_log_records(mapping_config: Dict[str, Any]) -> List[Dict[str, Any]]:
-    source = mapping_config.get('source', {})
-    path = source.get('path') or source.get('file_path')
+def _extract_laravel_log_records(source_config: Dict[str, Any]) -> List[Dict[str, Any]]:
+    path = source_config.get('path') or source_config.get('file_path')
     if not path:
         raise ValueError("Caminho do arquivo de log não especificado")
     
-    max_mb = int(source.get('max_memory_mb', 50))
+    max_mb = int(source_config.get('max_memory_mb', 50))
     chunk_size = max_mb * 1024 * 1024
     records: List[Dict[str, Any]] = []
     
