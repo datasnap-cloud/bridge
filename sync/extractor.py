@@ -808,6 +808,7 @@ def extract_mapping_data(mapping_config: Dict[str, Any],
     
     try:
         # Resolve a configuração da fonte usando connection_ref
+        logger.info(f"🔍 Configuração recebida para extração: {json.dumps(mapping_config, indent=2, default=str)}")
         logger.debug(f"🔍 Resolvendo configuração da fonte de dados...")
         source_config = _resolve_source_config(mapping_config)
         if not source_config:

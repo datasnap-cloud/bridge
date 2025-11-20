@@ -380,7 +380,8 @@ class SyncRunner:
             with open(mapping_file, 'r', encoding='utf-8') as f:
                 config = json.load(f)
                 
-            self.logger.info(f"✅ Configuração do mapeamento carregada com sucesso")
+            self.logger.info(f"✅ Configuração do mapeamento carregada com sucesso de: {mapping_file}")
+            self.logger.info(f"📜 Conteúdo da configuração: {json.dumps(config, indent=2, default=str)}")
             self.logger.debug(f"🔧 Fonte de dados: {config.get('source_type', 'N/A')}")
             self.logger.debug(f"🏷️ Schema slug: {config.get('schema_slug', 'N/A')}")
             self.logger.debug(f"🗂️ Tabela: {config.get('table_name', 'N/A')}")
