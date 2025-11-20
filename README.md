@@ -399,6 +399,26 @@ python cli.py setup
 }
 ```
 
+#### Laravel Log
+```json
+{
+  "name": "laravel-app",
+  "type": "laravel_log",
+  "connection": {
+    "host": "local",
+    "port": 0,
+    "database": "laravel",
+    "username": "",
+    "password": "",
+    "options": {
+      "log_path": "path/to/laravel/storage/logs/laravel.log",
+      "max_memory_mb": 50
+    }
+  }
+}
+```
+Use o menu `python cli.py setup` → `Fontes de Dados` → `Cadastrar fonte de log Laravel` para cadastrar indicando o caminho do arquivo `laravel.log`.
+
 ### Configuração de Mapeamentos
 
 Os mapeamentos definem como os dados são extraídos e enviados para a DataSnap:
@@ -422,6 +442,40 @@ Os mapeamentos definem como os dados são extraídos e enviados para a DataSnap:
   },
   "query": "SELECT * FROM user_events WHERE created_at > '2024-01-01'"
 }
+```
+
+#### Mapeamento para logs Laravel
+```json
+{
+  "version": 1,
+  "source": {
+    "name": "laravel-app",
+    "type": "laravel_log",
+    "connection_ref": "laravel-app"
+  },
+  "table": "laravel_log",
+  "schema": {
+    "slug": "meu-schema-logs"
+  },
+  "transfer": {
+    "incremental_mode": "full",
+    "batch_size": 10000
+  }
+}
+```
+Schema esperado para JSONL:
+- `log_date`: data e hora do evento (ex.: `2025-11-19 23:25:20`)
+- `type`: nível do evento (ex.: `INFO`, `ERROR`)
+- `environment`: ambiente (ex.: `local`, `production`)
+- `message`: mensagem completa do log
+
+Formato de linha aceito: `[YYYY-MM-DD HH:MM:SS] ambiente.NIVEL: mensagem ...` com suporte a múltiplas linhas de mensagem até o próximo cabeçalho.
+
+Limite de memória: leitura em blocos de até `max_memory_mb` (padrão 50MB). O último registro do bloco é ignorado se estiver incompleto, sendo processado na próxima leitura.
+
+Teste rápido de geração JSONL:
+```bash
+python cli.py test_laravel_log --file path/to/laravel/storage/logs/laravel.log --schema meus-logs --batch-size 10000 --max-mb 50
 ```
 
 #### Configurações de Transfer

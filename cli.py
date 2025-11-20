@@ -214,6 +214,68 @@ def _display_sync_status(status: dict):
 
 
 @app.command()
+def test_laravel_log(
+    file: str = typer.Option(..., "--file", help="Caminho para o arquivo laravel.log"),
+    schema_slug: str = typer.Option(..., "--schema", help="Slug do schema de destino"),
+    batch_size: int = typer.Option(10000, "--batch-size", help="Tamanho do lote de registros"),
+    max_memory_mb: int = typer.Option(50, "--max-mb", help="Limite de memória por leitura em MB")
+):
+    try:
+        from sync.extractor import extract_mapping_data
+        from sync.jsonl_writer import JSONLBatchWriter
+        from core.paths import BridgePaths
+        console.print("[bold blue]🧪 Teste de geração JSONL a partir de laravel.log[/bold blue]")
+        mapping_config = {
+            "source": {
+                "type": "laravel_log",
+                "path": file,
+                "max_memory_mb": max_memory_mb
+            },
+            "schema": {"slug": schema_slug},
+            "transfer": {"incremental_mode": "full", "batch_size": batch_size}
+        }
+        result = extract_mapping_data(mapping_config, batch_size=batch_size)
+        if not result.success:
+            console.print(f"[red]❌ Falha ao extrair: {result.error_message}[/red]")
+            raise typer.Exit(1)
+        console.print(f"[green]✅ Extraídos {result.record_count} registros[/green]")
+        paths = BridgePaths()
+        writer = JSONLBatchWriter(
+            mapping_name="laravel_log_test",
+            schema_slug=schema_slug,
+            output_dir=paths.uploads_dir,
+            compress=False,
+            max_file_size=max_memory_mb * 1024 * 1024,
+            max_records_per_file=batch_size
+        )
+        with writer:
+            writer.write_batch(result.data)
+            files = writer.close()
+        for info in files:
+            console.print(f"[cyan]📄 {info.file_path.name}[/cyan] — {info.file_size} bytes, {info.record_count} registros")
+        console.print("[bold green]Concluído[/bold green]")
+    except Exception as e:
+        logger.exception(f"Erro no teste de laravel.log: {e}")
+        console.print(f"[red]❌ Erro: {e}[/red]")
+        raise typer.Exit(1)
+
+
+@app.command(name="test_laravel_log")
+def test_laravel_log_alias(
+    file: str = typer.Option(..., "--file", help="Caminho para o arquivo laravel.log"),
+    schema_slug: str = typer.Option(..., "--schema", help="Slug do schema de destino"),
+    batch_size: int = typer.Option(10000, "--batch-size", help="Tamanho do lote de registros"),
+    max_memory_mb: int = typer.Option(50, "--max-mb", help="Limite de memória por leitura em MB")
+):
+    return test_laravel_log(
+        file=file,
+        schema_slug=schema_slug,
+        batch_size=batch_size,
+        max_memory_mb=max_memory_mb
+    )
+
+
+@app.command()
 def status():
     """
     Exibe o status do sistema e conectividade

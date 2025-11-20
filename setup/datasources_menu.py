@@ -79,6 +79,7 @@ def _show_datasources_menu() -> bool:
         console.print("[2] 📋 Listar fontes de dados")
         console.print("[3] 🗑️ Excluir fonte de dados")
         console.print("[4] 📊 Cadastrar tabelas de uma fonte")
+        console.print("[5] 📄 Cadastrar fonte de log Laravel")
         console.print("[0] ⬅️ Voltar ao menu principal")
         
         while True:
@@ -101,6 +102,9 @@ def _show_datasources_menu() -> bool:
                 return True
             elif choice == "4":
                 _register_tables_menu()
+                return True
+            elif choice == "5":
+                _create_laravel_log_datasource()
                 return True
             else:
                 logger.warning(f"⚠️ Opção inválida selecionada: {choice}")
@@ -207,6 +211,62 @@ def _create_new_datasource() -> None:
         console.print("\n[yellow]⚠️ Criação cancelada pelo usuário[/yellow]")
     except Exception as e:
         logger.exception(f"❌ Erro na criação de fonte de dados: {e}")
+        show_error_message(f"Erro inesperado: {e}")
+        _wait_for_continue()
+
+
+def _create_laravel_log_datasource() -> None:
+    logger.debug("➕ Iniciando criação de fonte de log Laravel")
+    try:
+        console.clear()
+        title = Text("Criar Fonte de Log Laravel", style="bold cyan")
+        header = Panel(title, border_style="cyan", padding=(1, 2))
+        console.print(header)
+        while True:
+            name = Prompt.ask("Nome da fonte de log").strip()
+            if not name:
+                console.print("[red]❌ Nome não pode estar vazio.[/red]")
+                continue
+            if datasources_store.get_datasource_by_name(name):
+                console.print(f"[red]❌ Já existe uma fonte com o nome '{name}'.[/red]")
+                continue
+            break
+        log_path = Prompt.ask("Caminho do arquivo laravel.log").strip()
+        if not log_path:
+            show_error_message("Caminho do arquivo é obrigatório.")
+            _wait_for_continue()
+            return
+        max_mb_str = Prompt.ask("Limite de memória em MB", default="50").strip()
+        try:
+            max_mb = int(max_mb_str)
+        except ValueError:
+            max_mb = 50
+        connection = DatabaseConnection(
+            host="local",
+            port=0,
+            database="laravel",
+            user="",
+            password="",
+            options={
+                "log_path": log_path,
+                "max_memory_mb": max_mb
+            }
+        )
+        try:
+            datasource = datasources_store.add_datasource(name, "laravel_log", connection)
+            show_success_message(f"💾 Fonte de log '{name}' salva: {log_path}")
+            logger.info(f"✅ Fonte de log criada: {name} -> {log_path}")
+        except ValueError as e:
+            show_error_message(str(e))
+            logger.warning(f"⚠️ Erro ao salvar fonte de log: {e}")
+        except Exception as e:
+            show_error_message(f"Erro ao salvar: {e}")
+            logger.exception(f"❌ Erro ao salvar fonte de log: {e}")
+        _wait_for_continue()
+    except KeyboardInterrupt:
+        console.print("\n[yellow]⚠️ Criação cancelada pelo usuário[/yellow]")
+    except Exception as e:
+        logger.exception(f"❌ Erro na criação de fonte de log: {e}")
         show_error_message(f"Erro inesperado: {e}")
         _wait_for_continue()
 

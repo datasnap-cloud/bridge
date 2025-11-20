@@ -128,6 +128,8 @@ def _select_datasource() -> Optional[Dict[str, Any]]:
 def _select_table(datasource: Dict[str, Any]) -> Optional[str]:
     """Seleciona uma tabela da fonte de dados"""
     try:
+        if datasource.get('type') == 'laravel_log':
+            return 'laravel_log'
         # Obter tabelas selecionadas da fonte de dados
         tables_info = datasource.get('tables', {})
         selected_tables = tables_info.get('selected', [])
@@ -299,6 +301,38 @@ def _configure_mapping(datasource: Dict[str, Any], table: str, api_key_name: str
     print(f"\nConfiguração do vínculo para {datasource['name']}.{table} → schema \"{schema.get('name', 'N/A')} ({schema.get('slug', 'N/A')})\"")
     print(f"Schema ID: {schema.get('id', 'N/A')} | Slug: {schema.get('slug', 'N/A')}")
     
+    if datasource.get('type') == 'laravel_log':
+        batch_size_input = input("Tamanho do lote [5000]: ").strip()
+        try:
+            batch_size = int(batch_size_input) if batch_size_input else 5000
+        except ValueError:
+            batch_size = 5000
+        mapping_config = {
+            "version": 1,
+            "source": {
+                "name": datasource['name'],
+                "type": "laravel_log",
+                "connection_ref": datasource['name']
+            },
+            "table": table,
+            "schema": {
+                "id": schema.get('id'),
+                "name": schema.get('name'),
+                "slug": schema.get('slug'),
+                "token_ref": api_key_name
+            },
+            "transfer": {
+                "incremental_mode": "full",
+                "batch_size": batch_size,
+                "order_by": None,
+                "min_records_for_upload": 0,
+                "delete_after_upload": False,
+                "delete_safety": {"enabled": False, "where_column": None}
+            },
+            "notes": "Arquivo gerado via Bridge Setup. Editável."
+        }
+        return mapping_config
+
     # Detectar chave primária automaticamente
     detected_pk = None
     try:
