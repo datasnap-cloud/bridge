@@ -19,7 +19,7 @@ class TestLaravelLogParser(unittest.TestCase):
             temp_path = tf.name
         try:
             mapping["source"]["path"] = temp_path
-            records = _extract_laravel_log_records(mapping)
+            records = _extract_laravel_log_records(mapping["source"])
             assert records is not None
             assert len(records) >= 2
             assert records[0]["environment"] == "local"
