@@ -829,16 +829,8 @@ def extract_mapping_data(mapping_config: Dict[str, Any],
         
         if source_type == 'laravel_log':
             records = _extract_laravel_log_records(mapping_config)
-            if records is None:
-                error_msg = "Falha ao extrair registros do arquivo de log"
-                logger.error(f"❌ {error_msg}")
-                return ExtractionResult(
-                    success=False,
-                    record_count=0,
-                    error_message=error_msg,
-                    start_time=start_time,
-                    end_time=get_current_timestamp()
-                )
+            # Se houver erro, _extract_laravel_log_records lançará exceção que será capturada abaixo
+            
             end_time = get_current_timestamp()
             extraction_time = end_time - start_time
             return ExtractionResult(
@@ -1095,46 +1087,50 @@ def test_source_connection(source_config: Dict[str, Any]) -> Tuple[bool, str]:
         return False, f"Erro ao testar conexão: {e}"
 
 
-def _extract_laravel_log_records(mapping_config: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
-    try:
-        source = mapping_config.get('source', {})
-        path = source.get('path') or source.get('file_path')
-        if not path:
-            return None
-        max_mb = int(source.get('max_memory_mb', 50))
-        chunk_size = max_mb * 1024 * 1024
-        records: List[Dict[str, Any]] = []
-        start_re = re.compile(r"^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s+([^\.]+)\.([A-Za-z]+):\s?", re.MULTILINE)
-        with open(path, 'rb') as f:
-            while True:
-                chunk = f.read(chunk_size)
-                if not chunk:
-                    break
-                text = chunk.decode('utf-8', errors='ignore')
-                positions = []
-                for m in start_re.finditer(text):
-                    positions.append((m.start(), m.end(), m.group(1), m.group(2), m.group(3)))
-                if not positions:
-                    peek = f.read(1)
-                    if peek:
-                        f.seek(f.tell() - 1, os.SEEK_SET)
-                    continue
-                last_index = len(positions)
+def _extract_laravel_log_records(mapping_config: Dict[str, Any]) -> List[Dict[str, Any]]:
+    source = mapping_config.get('source', {})
+    path = source.get('path') or source.get('file_path')
+    if not path:
+        raise ValueError("Caminho do arquivo de log não especificado")
+    
+    max_mb = int(source.get('max_memory_mb', 50))
+    chunk_size = max_mb * 1024 * 1024
+    records: List[Dict[str, Any]] = []
+    
+    # Regex para identificar início de log: [2024-01-01 10:00:00] env.TYPE:
+    start_re = re.compile(r"^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s+([^\.]+)\.([A-Za-z]+):\s?", re.MULTILINE)
+    
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"Arquivo de log não encontrado: {path}")
+        
+    with open(path, 'rb') as f:
+        while True:
+            chunk = f.read(chunk_size)
+            if not chunk:
+                break
+            text = chunk.decode('utf-8', errors='ignore')
+            positions = []
+            for m in start_re.finditer(text):
+                positions.append((m.start(), m.end(), m.group(1), m.group(2), m.group(3)))
+            if not positions:
                 peek = f.read(1)
                 if peek:
                     f.seek(f.tell() - 1, os.SEEK_SET)
-                    last_index -= 1
-                for i in range(0, max(last_index, 0)):
-                    start, end, dt, env, typ = positions[i]
-                    msg_start = end
-                    msg_end = positions[i + 1][0] if i + 1 < len(positions) else len(text)
-                    message = text[msg_start:msg_end].strip()
-                    records.append({
-                        'log_date': dt,
-                        'type': typ.upper(),
-                        'environment': env,
-                        'message': message
-                    })
-        return records
-    except Exception:
-        return None
+                continue
+            last_index = len(positions)
+            peek = f.read(1)
+            if peek:
+                f.seek(f.tell() - 1, os.SEEK_SET)
+                last_index -= 1
+            for i in range(0, max(last_index, 0)):
+                start, end, dt, env, typ = positions[i]
+                msg_start = end
+                msg_end = positions[i + 1][0] if i + 1 < len(positions) else len(text)
+                message = text[msg_start:msg_end].strip()
+                records.append({
+                    'log_date': dt,
+                    'type': typ.upper(),
+                    'environment': env,
+                    'message': message
+                })
+    return records

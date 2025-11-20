@@ -164,6 +164,8 @@ def sync(
         logger.info("⏹️ Sincronização interrompida pelo usuário")
         console.print("\n[yellow]👋 Sincronização interrompida...[/yellow]")
         raise typer.Exit(130)
+    except typer.Exit:
+        raise
     except ImportError as e:
         logger.error(f"📦 Erro ao importar módulos de sincronização: {e}")
         console.print(f"[red]❌ Erro ao importar módulos: {e}[/red]")
