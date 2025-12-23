@@ -1,0 +1,133 @@
+{
+  "affiliate dashboard": [
+    "affiliates:datasnap-affiliates"
+  ],
+  "referral tracking": [
+    "affiliates:datasnap-affiliates"
+  ],
+  "affiliateauth.ts": [
+    "affiliates:datasnap-affiliates (hotspot: src/stores/affiliateAuth.ts)"
+  ],
+  "affiliatedashboard.vue": [
+    "affiliates:datasnap-affiliates (hotspot: src/pages/AffiliateDashboard.vue)"
+  ],
+  "tenancy": [
+    "backend:datasnap-backend"
+  ],
+  "schemas/data": [
+    "backend:datasnap-backend"
+  ],
+  "billing": [
+    "backend:datasnap-backend"
+  ],
+  "affiliates": [
+    "backend:datasnap-backend"
+  ],
+  "ai/chat": [
+    "backend:datasnap-backend"
+  ],
+  "schemacontroller.php": [
+    "backend:datasnap-backend (hotspot: app/Http/Controllers/Api/SchemaController.php)"
+  ],
+  "tenantschema.php": [
+    "backend:datasnap-backend (hotspot: app/Models/TenantSchema.php)"
+  ],
+  "affiliateauthcontroller.php": [
+    "backend:datasnap-backend (hotspot: app/Http/Controllers/Api/AffiliateAuthController.php)"
+  ],
+  "etl": [
+    "cli:datasnap-bridge",
+    "dataflow:datasnap-dataflow",
+    "functions:datasnap-functions"
+  ],
+  "cli": [
+    "cli:datasnap-bridge"
+  ],
+  "data sync": [
+    "cli:datasnap-bridge"
+  ],
+  "extractor.py": [
+    "cli:datasnap-bridge (hotspot: sync/extractor.py)"
+  ],
+  "uploader.py": [
+    "cli:datasnap-bridge (hotspot: sync/uploader.py)"
+  ],
+  "secrets_store.py": [
+    "cli:datasnap-bridge (hotspot: core/secrets_store.py)"
+  ],
+  "big data": [
+    "dataflow:datasnap-dataflow"
+  ],
+  "run_dataflow.py": [
+    "dataflow:datasnap-dataflow (hotspot: run_dataflow.py)"
+  ],
+  "user portal": [
+    "frontend:datasnap-frontend"
+  ],
+  "admin portal": [
+    "frontend:datasnap-frontend"
+  ],
+  "onboarding": [
+    "frontend:datasnap-frontend"
+  ],
+  "billing ui": [
+    "frontend:datasnap-frontend"
+  ],
+  "auth.ts": [
+    "frontend:datasnap-frontend (hotspot: frontend/src/stores/auth.ts)"
+  ],
+  "schemaquery.vue": [
+    "frontend:datasnap-frontend (hotspot: frontend/src/pages/SchemaQuery.vue)"
+  ],
+  "dashboardlayout.vue": [
+    "frontend:datasnap-frontend (hotspot: frontend/src/layouts/DashboardLayout.vue)"
+  ],
+  "serverless": [
+    "functions:datasnap-functions"
+  ],
+  "func.py": [
+    "functions:datasnap-functions (hotspot: func.py)"
+  ],
+  "networking": [
+    "infra:datasnap-infra"
+  ],
+  "compute": [
+    "infra:datasnap-infra"
+  ],
+  "database": [
+    "infra:datasnap-infra"
+  ],
+  "networking.tf": [
+    "infra:datasnap-infra (hotspot: networking.tf)"
+  ],
+  "terraform.tfvars": [
+    "infra:datasnap-infra (hotspot: terraform.tfvars)"
+  ],
+  "marketing": [
+    "landing:datasnap-landing"
+  ],
+  "seo": [
+    "landing:datasnap-landing"
+  ],
+  "lead gen": [
+    "landing:datasnap-landing"
+  ],
+  "index.astro": [
+    "landing:datasnap-landing (hotspot: src/pages/index.astro)"
+  ],
+  "components": [
+    "landing:datasnap-landing (hotspot: src/components)"
+  ],
+  "documentation": [
+    "docs:datasnap-docs"
+  ],
+  "developer experience": [
+    "docs:datasnap-docs"
+  ],
+  "docs.json": [
+    "docs:datasnap-docs (hotspot: docs.json)"
+  ],
+  "api-reference": [
+    "docs:datasnap-docs (hotspot: api-reference/)"
+  ]
+}

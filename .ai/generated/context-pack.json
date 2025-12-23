@@ -1,0 +1,61 @@
+{
+    "schema_version": "1.0",
+    "repo_name": "datasnap-bridge",
+    "repo_type": "cli",
+    "commit_sha": "TODO_INJECT_SHA",
+    "generated_at": "2025-12-23T02:00:00-03:00",
+    "stack": "Python, Typer, SQL Drivers",
+    "domains": [
+        "ETL",
+        "CLI",
+        "Data Sync"
+    ],
+    "entrypoints": [
+        {
+            "name": "CLI Main",
+            "type": "cli",
+            "path": "cli.py",
+            "notes": "Main entrypoint for all commands"
+        }
+    ],
+    "hotspots": [
+        {
+            "path": "sync/extractor.py",
+            "why": "Core logic for pulling data from SQL/Files"
+        },
+        {
+            "path": "sync/uploader.py",
+            "why": "Critical path for data reliability (Retries, Checksums)"
+        },
+        {
+            "path": "core/secrets_store.py",
+            "why": "Security critical (Encryption of keys)"
+        }
+    ],
+    "dependencies": [
+        "typer",
+        "rich",
+        "requests",
+        "cryptography",
+        "sqlalchemy (optional)",
+        "psycopg2",
+        "pymysql"
+    ],
+    "environments": {
+        "local": "Python Virtualenv"
+    },
+    "snippets": [
+        {
+            "title": "Run Sync",
+            "bullets": [
+                "python cli.py sync --all"
+            ]
+        },
+        {
+            "title": "Setup",
+            "bullets": [
+                "python cli.py setup"
+            ]
+        }
+    ]
+}

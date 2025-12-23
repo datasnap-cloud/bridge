@@ -1,0 +1,530 @@
+{
+  "workspace": {
+    "generated_at": "2025-12-23T16:46:55.108637",
+    "packs_found": 9,
+    "repo_types": [
+      "affiliates",
+      "functions",
+      "cli",
+      "frontend",
+      "infra",
+      "landing",
+      "dataflow",
+      "docs",
+      "backend"
+    ],
+    "environments": {
+      "backend": {
+        "local": "https://datasnap-backend.test",
+        "production": "https://api.datasnap.cloud/"
+      },
+      "frontend": {
+        "local": "http://localhost:5173",
+        "production": "https://app.datasnap.cloud/"
+      },
+      "affiliates": {
+        "local": "http://localhost:5174",
+        "production": "https://affiliates.datasnap.cloud/"
+      },
+      "landing": {
+        "local": "http://localhost:4321",
+        "production": "https://datasnap.cloud/"
+      },
+      "docs": {
+        "local": "http://localhost:3001",
+        "production": "https://docs.datasnap.cloud/"
+      }
+    }
+  },
+  "packs": [
+    {
+      "schema_version": "1.0",
+      "repo_name": "datasnap-affiliates",
+      "repo_type": "affiliates",
+      "commit_sha": "TODO_INJECT_SHA",
+      "generated_at": "2025-12-22T22:40:00-03:00",
+      "stack": "Vue 3, Vite, Tailwind, Pinia",
+      "domains": [
+        "Affiliate Dashboard",
+        "Referral Tracking"
+      ],
+      "entrypoints": [
+        {
+          "name": "App Router",
+          "type": "ui",
+          "path": "src/router/index.ts",
+          "notes": "Affiliate portal navigation"
+        }
+      ],
+      "hotspots": [
+        {
+          "path": "src/stores/affiliateAuth.ts",
+          "why": "Specific auth logic for partners"
+        },
+        {
+          "path": "src/pages/AffiliateDashboard.vue",
+          "why": "Main view for metrics"
+        }
+      ],
+      "dependencies": [
+        "vue",
+        "pinia",
+        "axios"
+      ],
+      "environments": {
+        "local": "http://localhost:5174",
+        "production": "https://affiliates.datasnap.cloud/"
+      },
+      "snippets": [
+        {
+          "title": "API Convention",
+          "bullets": [
+            "All API requests go to /api/affiliates prefix"
+          ]
+        }
+      ],
+      "normalized_type": "affiliates",
+      "source_path": "D:\\datasnap.cloud\\affiliates\\.ai\\generated\\context-pack.json",
+      "repo_path": "affiliates"
+    },
+    {
+      "schema_version": "1.0",
+      "repo_name": "datasnap-backend",
+      "repo_type": "backend",
+      "commit_sha": "TODO_INJECT_SHA",
+      "generated_at": "2025-12-22T22:15:00-03:00",
+      "stack": "Laravel 11, PHP 8.2, Redis, PostgreSQL/MySQL",
+      "domains": [
+        "Tenancy",
+        "Schemas/Data",
+        "Billing",
+        "Affiliates",
+        "AI/Chat"
+      ],
+      "entrypoints": [
+        {
+          "name": "API Routes",
+          "type": "api",
+          "path": "routes/api.php",
+          "notes": "Central entrypoint for all REST endpoints"
+        },
+        {
+          "name": "Console Commands",
+          "type": "cli",
+          "path": "routes/console.php",
+          "notes": "Scheduled tasks and artisan commands"
+        }
+      ],
+      "hotspots": [
+        {
+          "path": "app/Http/Controllers/Api/SchemaController.php",
+          "why": "Core logic for data definition and ingestion triggers"
+        },
+        {
+          "path": "app/Models/TenantSchema.php",
+          "why": "Central model for user data structure"
+        },
+        {
+          "path": "app/Http/Controllers/Api/AffiliateAuthController.php",
+          "why": "Complex auth flow for affiliates (separate guard)"
+        }
+      ],
+      "dependencies": [
+        "laravel/framework",
+        "laravel/sanctum",
+        "league/flysystem-aws-s3-v3"
+      ],
+      "environments": {
+        "local": "https://datasnap-backend.test",
+        "production": "https://api.datasnap.cloud/"
+      },
+      "snippets": [
+        {
+          "title": "Auth Checks",
+          "bullets": [
+            "Use auth:sanctum for App Users",
+            "Use auth:affiliate for Affiliates",
+            "Check RoleMiddleware for admin/manager access"
+          ]
+        }
+      ],
+      "normalized_type": "backend",
+      "source_path": "D:\\datasnap.cloud\\datasnap-backend\\.ai\\generated\\context-pack.json",
+      "repo_path": "datasnap-backend"
+    },
+    {
+      "schema_version": "1.0",
+      "repo_name": "datasnap-bridge",
+      "repo_type": "cli",
+      "commit_sha": "TODO_INJECT_SHA",
+      "generated_at": "2025-12-23T02:00:00-03:00",
+      "stack": "Python, Typer, SQL Drivers",
+      "domains": [
+        "ETL",
+        "CLI",
+        "Data Sync"
+      ],
+      "entrypoints": [
+        {
+          "name": "CLI Main",
+          "type": "cli",
+          "path": "cli.py",
+          "notes": "Main entrypoint for all commands"
+        }
+      ],
+      "hotspots": [
+        {
+          "path": "sync/extractor.py",
+          "why": "Core logic for pulling data from SQL/Files"
+        },
+        {
+          "path": "sync/uploader.py",
+          "why": "Critical path for data reliability (Retries, Checksums)"
+        },
+        {
+          "path": "core/secrets_store.py",
+          "why": "Security critical (Encryption of keys)"
+        }
+      ],
+      "dependencies": [
+        "typer",
+        "rich",
+        "requests",
+        "cryptography",
+        "sqlalchemy (optional)",
+        "psycopg2",
+        "pymysql"
+      ],
+      "environments": {
+        "local": "Python Virtualenv"
+      },
+      "snippets": [
+        {
+          "title": "Run Sync",
+          "bullets": [
+            "python cli.py sync --all"
+          ]
+        },
+        {
+          "title": "Setup",
+          "bullets": [
+            "python cli.py setup"
+          ]
+        }
+      ],
+      "normalized_type": "cli",
+      "source_path": "D:\\datasnap.cloud\\datasnap-bridge\\.ai\\generated\\context-pack.json",
+      "repo_path": "datasnap-bridge"
+    },
+    {
+      "schema_version": "1.0",
+      "repo_name": "datasnap-dataflow",
+      "repo_type": "dataflow",
+      "commit_sha": "TODO_INJECT_SHA",
+      "generated_at": "2025-12-22T23:30:00-03:00",
+      "stack": "PySpark, Oracle Data Flow",
+      "domains": [
+        "Big Data",
+        "ETL"
+      ],
+      "entrypoints": [
+        {
+          "name": "Spark Job",
+          "type": "job",
+          "path": "run_dataflow.py",
+          "notes": "Main Spark Application"
+        }
+      ],
+      "hotspots": [
+        {
+          "path": "run_dataflow.py",
+          "why": "Core ETL Logic"
+        }
+      ],
+      "dependencies": [
+        "pyspark"
+      ],
+      "environments": {
+        "production": "OCI Data Flow"
+      },
+      "snippets": [
+        {
+          "title": "Local Run",
+          "bullets": [
+            "python run_dataflow.py (requires SPARK_HOME)"
+          ]
+        }
+      ],
+      "normalized_type": "dataflow",
+      "source_path": "D:\\datasnap.cloud\\datasnap-dataflow\\.ai\\generated\\context-pack.json",
+      "repo_path": "datasnap-dataflow"
+    },
+    {
+      "schema_version": "1.0",
+      "repo_name": "datasnap-frontend",
+      "repo_type": "frontend",
+      "commit_sha": "TODO_INJECT_SHA",
+      "generated_at": "2025-12-22T22:30:00-03:00",
+      "stack": "Vue 3, Vite, TypeScript, Tailwind, Pinia",
+      "domains": [
+        "User Portal",
+        "Admin Portal",
+        "Onboarding",
+        "Billing UI"
+      ],
+      "entrypoints": [
+        {
+          "name": "App Mount",
+          "type": "ui",
+          "path": "frontend/src/main.ts",
+          "notes": "Application entry point"
+        },
+        {
+          "name": "Router Config",
+          "type": "ui",
+          "path": "frontend/src/router/index.ts",
+          "notes": "Main navigation structure"
+        }
+      ],
+      "hotspots": [
+        {
+          "path": "frontend/src/stores/auth.ts",
+          "why": "Central authentication logic"
+        },
+        {
+          "path": "frontend/src/pages/SchemaQuery.vue",
+          "why": "Complex data querying interface"
+        },
+        {
+          "path": "frontend/src/layouts/DashboardLayout.vue",
+          "why": "Main layout for authenticated users"
+        }
+      ],
+      "dependencies": [
+        "vue",
+        "vue-router",
+        "pinia",
+        "axios"
+      ],
+      "environments": {
+        "local": "http://localhost:5173",
+        "production": "https://app.datasnap.cloud/"
+      },
+      "snippets": [
+        {
+          "title": "API Calls",
+          "bullets": [
+            "Use src/services/* for API calls",
+            "Do not use axios directly in components"
+          ]
+        }
+      ],
+      "normalized_type": "frontend",
+      "source_path": "D:\\datasnap.cloud\\datasnap-frontend\\.ai\\generated\\context-pack.json",
+      "repo_path": "datasnap-frontend"
+    },
+    {
+      "schema_version": "1.0",
+      "repo_name": "datasnap-functions",
+      "repo_type": "functions",
+      "commit_sha": "TODO_INJECT_SHA",
+      "generated_at": "2025-12-22T23:20:00-03:00",
+      "stack": "Python 3.11, PyArrow, OCI FDK",
+      "domains": [
+        "ETL",
+        "Serverless"
+      ],
+      "entrypoints": [
+        {
+          "name": "Handler",
+          "type": "event",
+          "path": "func.py",
+          "notes": "Main FDK handler entrypoint"
+        }
+      ],
+      "hotspots": [
+        {
+          "path": "func.py",
+          "why": "Entire logic contained here"
+        }
+      ],
+      "dependencies": [
+        "fdk",
+        "oci",
+        "pyarrow"
+      ],
+      "environments": {
+        "production": "OCI Functions"
+      },
+      "snippets": [
+        {
+          "title": "Local Test",
+          "bullets": [
+            "cat test_input.json | fn invoke datasnap-etl"
+          ]
+        }
+      ],
+      "normalized_type": "functions",
+      "source_path": "D:\\datasnap.cloud\\datasnap-functions\\.ai\\generated\\context-pack.json",
+      "repo_path": "datasnap-functions"
+    },
+    {
+      "schema_version": "1.0",
+      "repo_name": "datasnap-infra",
+      "repo_type": "infra",
+      "commit_sha": "TODO_INJECT_SHA",
+      "generated_at": "2025-12-23T02:00:00-03:00",
+      "stack": "Terraform, OCI, Kubernetes",
+      "domains": [
+        "Networking",
+        "Compute",
+        "Database"
+      ],
+      "entrypoints": [
+        {
+          "name": "Root Module",
+          "type": "infra",
+          "path": ".",
+          "notes": "Main Terraform configuration for sa-saopaulo-1"
+        }
+      ],
+      "hotspots": [
+        {
+          "path": "networking.tf",
+          "why": "Connectivity logic / VCN"
+        },
+        {
+          "path": "terraform.tfvars",
+          "why": "Environment configuration (Region, Secrets)"
+        }
+      ],
+      "dependencies": [
+        "hashicorp/oci"
+      ],
+      "environments": {
+        "production": "OCI (sa-saopaulo-1)"
+      },
+      "snippets": [
+        {
+          "title": "Apply",
+          "bullets": [
+            "terraform apply -auto-approve"
+          ]
+        }
+      ],
+      "normalized_type": "infra",
+      "source_path": "D:\\datasnap.cloud\\datasnap-infra\\.ai\\generated\\context-pack.json",
+      "repo_path": "datasnap-infra"
+    },
+    {
+      "schema_version": "1.0",
+      "repo_name": "datasnap-landing",
+      "repo_type": "landing",
+      "commit_sha": "TODO_INJECT_SHA",
+      "generated_at": "2025-12-22T22:50:00-03:00",
+      "stack": "Astro 5, React, Tailwind, TypeScript",
+      "domains": [
+        "Marketing",
+        "SEO",
+        "Lead Gen"
+      ],
+      "entrypoints": [
+        {
+          "name": "Home Page",
+          "type": "ui",
+          "path": "src/pages/index.astro",
+          "notes": "Main landing page"
+        }
+      ],
+      "hotspots": [
+        {
+          "path": "src/pages/index.astro",
+          "why": "High traffic entry point"
+        },
+        {
+          "path": "src/components",
+          "why": "Reusable UI blocks"
+        }
+      ],
+      "dependencies": [
+        "astro",
+        "react",
+        "tailwindcss"
+      ],
+      "environments": {
+        "local": "http://localhost:4321",
+        "production": "https://datasnap.cloud/"
+      },
+      "snippets": [
+        {
+          "title": "Deployment",
+          "bullets": [
+            "Static export output to dist/",
+            "Deployed via Vercel/Netlify/Pages"
+          ]
+        }
+      ],
+      "normalized_type": "landing",
+      "source_path": "D:\\datasnap.cloud\\datasnap-landing\\.ai\\generated\\context-pack.json",
+      "repo_path": "datasnap-landing"
+    },
+    {
+      "schema_version": "1.0",
+      "repo_name": "datasnap-docs",
+      "repo_type": "docs",
+      "commit_sha": "TODO_INJECT_SHA",
+      "generated_at": "2025-12-22T23:00:00-03:00",
+      "stack": "Mintlify, MDX",
+      "domains": [
+        "Documentation",
+        "Developer Experience"
+      ],
+      "entrypoints": [
+        {
+          "name": "Config",
+          "type": "config",
+          "path": "docs.json",
+          "notes": "Navigation structure"
+        }
+      ],
+      "hotspots": [
+        {
+          "path": "docs.json",
+          "why": "Central navigation control"
+        },
+        {
+          "path": "api-reference/",
+          "why": "Most accessed section"
+        }
+      ],
+      "dependencies": [
+        "mintlify"
+      ],
+      "environments": {
+        "local": "http://localhost:3000",
+        "production": "https://docs.datasnap.cloud/"
+      },
+      "snippets": [
+        {
+          "title": "Admonitions",
+          "bullets": [
+            "Use <Note>...</Note> for info",
+            "Use <Warning>...</Warning> for risks"
+          ]
+        }
+      ],
+      "normalized_type": "docs",
+      "source_path": "D:\\datasnap.cloud\\docs\\.ai\\generated\\context-pack.json",
+      "repo_path": "docs"
+    }
+  ],
+  "global_glossary": {
+    "terms": []
+  },
+  "cross_repo": {
+    "api_index": {},
+    "ui_index": {},
+    "events_index": {},
+    "jobs_index": {}
+  }
+}

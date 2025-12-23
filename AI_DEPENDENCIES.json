@@ -1,0 +1,75 @@
+{
+  "nodes": [
+    {
+      "id": "repo:affiliates:datasnap-affiliates",
+      "type": "repo",
+      "label": "datasnap-affiliates"
+    },
+    {
+      "id": "repo:backend:datasnap-backend",
+      "type": "repo",
+      "label": "datasnap-backend"
+    },
+    {
+      "id": "repo:cli:datasnap-bridge",
+      "type": "repo",
+      "label": "datasnap-bridge"
+    },
+    {
+      "id": "repo:dataflow:datasnap-dataflow",
+      "type": "repo",
+      "label": "datasnap-dataflow"
+    },
+    {
+      "id": "repo:frontend:datasnap-frontend",
+      "type": "repo",
+      "label": "datasnap-frontend"
+    },
+    {
+      "id": "repo:functions:datasnap-functions",
+      "type": "repo",
+      "label": "datasnap-functions"
+    },
+    {
+      "id": "repo:infra:datasnap-infra",
+      "type": "repo",
+      "label": "datasnap-infra"
+    },
+    {
+      "id": "repo:landing:datasnap-landing",
+      "type": "repo",
+      "label": "datasnap-landing"
+    },
+    {
+      "id": "repo:docs:datasnap-docs",
+      "type": "repo",
+      "label": "datasnap-docs"
+    }
+  ],
+  "edges": [
+    {
+      "source": "repo:affiliates:datasnap-affiliates",
+      "target": "repo:backend:datasnap-backend",
+      "relation": "consumes_api",
+      "confidence": 0.9
+    },
+    {
+      "source": "repo:infra:datasnap-infra",
+      "target": "repo:dataflow:datasnap-dataflow",
+      "relation": "provisions",
+      "confidence": 0.8
+    },
+    {
+      "source": "repo:frontend:datasnap-frontend",
+      "target": "repo:backend:datasnap-backend",
+      "relation": "consumes_api",
+      "confidence": 0.9
+    },
+    {
+      "source": "repo:infra:datasnap-infra",
+      "target": "repo:functions:datasnap-functions",
+      "relation": "provisions",
+      "confidence": 0.8
+    }
+  ]
+}
