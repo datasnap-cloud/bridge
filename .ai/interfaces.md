@@ -1,23 +1,18 @@
-# Interfaces - DataSnap Bridge
+Last verified: 2025-12-28
+Source of truth: codebase scan
 
-## CLI Commands (`cli.py`)
-- `bridge setup`: Wizard de configuração interativa.
-- `bridge sync`: Comando principal de sincronização.
-    - Flags: `--all`, `--mapping <name>`, `--dry-run`, `--force`, `--status`.
-- `bridge status`: Diagnóstico de conectividade e estado.
+# Interfaces
+
+## CLI Commands
+Evidência: `cli.py`
+- `bridge setup`: Menu TUI interativo.
+- `bridge sync`:
+  - `--mapping`: Filtra sync específico.
+  - `--dry-run`: Simula sem upload.
+  - `--workers`: Concorrência.
+- `bridge status`: Checa conectividade e keys.
 - `bridge version`: Exibe versão.
-- `bridge test_laravel_log`: Comando utilitário para teste de parser de logs.
 
-## API Integration (`datasnap/api.py`)
-Interage com o Backend DataSnap (`datasnap-backend`):
-- `GET /api/v1/schemas`: Lista schemas disponíveis para o Tenant.
-- `POST /api/v1/schemas/{slug}/generate-upload-token`: Obtém URL presigned para upload.
-- `POST /api/v1/schemas/{slug}/notify-upload`: (Opcional) Notifica backend se não usar EventBridge.
-
-## Data Formats
-- **Input**:
-    - **SQL**: Result sets de queries (List of Dicts).
-    - **Log**: Linhas de texto não estruturado -> Regex -> Dict.
-- **Output**:
-    - **JSONL**: Newline Delimited JSON. Compressão GZIP opcional mas recomendada.
-    - **Metadata**: Cabeçalhos HTTP para o upload (Content-Type, Metadata customizado).
+## Integrações
+- **DataSnap API**: Envia dados para endpoints de ingestão (`/api/v1/schemas/{slug}/files`?).
+- **Fontes Locais**: MySQL, PostgreSQL, Logs.
