@@ -116,7 +116,14 @@ class SyncRunner:
             self.logger.info(f"[DEBUG] Carregando configuração do mapeamento: {mapping_name}")
             mapping_config = self._load_mapping_config(mapping_name)
             if not mapping_config:
-                raise ValueError(f"Configuração do mapeamento '{mapping_name}' não encontrada")
+                available = self._get_available_mappings()
+                msg = f"Configuração do mapeamento '{mapping_name}' não encontrada."
+                if available:
+                    mapping_list = ", ".join(sorted(available))
+                    msg += f"\n\nMapeamentos disponíveis:\n{mapping_list}"
+                else:
+                    msg += " Nenhum mapeamento disponível encontrado."
+                raise ValueError(msg)
             
             self.logger.info(f"[DEBUG] Configuração carregada com sucesso: {mapping_config}")
             

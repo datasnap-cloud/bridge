@@ -1126,11 +1126,32 @@ def _extract_laravel_log_records(source_config: Dict[str, Any]) -> List[Dict[str
                 start, end, dt, env, typ = positions[i]
                 msg_start = end
                 msg_end = positions[i + 1][0] if i + 1 < len(positions) else len(text)
-                message = text[msg_start:msg_end].strip()
+                full_message = text[msg_start:msg_end].strip()
+                
+                # Stacktrace detection
+                stacktrace = None
+                message = full_message
+                
+                # Common patterns for stacktraces in Laravel logs
+                stack_patterns = ['[stacktrace]', 'Stack trace:', '#0 ']
+                split_index = -1
+                
+                for pattern in stack_patterns:
+                    idx = full_message.find(pattern)
+                    if idx != -1:
+                        # If multiple patterns found, take the first occurrence
+                        if split_index == -1 or idx < split_index:
+                            split_index = idx
+
+                if split_index != -1:
+                    message = full_message[:split_index].strip()
+                    stacktrace = full_message[split_index:].strip()
+
                 records.append({
                     'log_date': dt,
                     'type': typ.upper(),
                     'environment': env,
-                    'message': message
+                    'message': message,
+                    'stacktrace': stacktrace
                 })
     return records
