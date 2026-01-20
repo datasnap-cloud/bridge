@@ -20,6 +20,8 @@ from sync.jsonl_writer import JSONLBatchWriter, JSONLFileInfo
 from sync.metrics import get_metrics_collector
 from sync.token_cache import TokenCache
 from sync.uploader import BatchUploader, UploadProgress, cleanup_uploaded_files
+from core.telemetry import telemetry
+from core.http import http_client
 
 
 @dataclass
@@ -78,6 +80,46 @@ class SyncRunner:
         
         self._running_syncs: Set[str] = set()
         self.logger.info(f"[DEBUG] SyncRunner.__init__ concluído")
+
+    def _send_telemetry(self, event_type: str, status: str, mapping_config: Optional[Dict] = None, **kwargs):
+        """Helper para envio seguro de telemetria"""
+        try:
+            # Obter token válido
+            token = None
+            try:
+                # Tenta obter token do cache se disponível
+                if self.token_cache:
+                    token = self.token_cache.get_token()
+            except Exception as e:
+                self.logger.warning(f"⚠️ Não foi possível obter token para telemetria: {e}")
+
+            # Determinar source e destination
+            source = "datasnap-bridge"
+            destination = "datasnap-cloud"
+            
+            if mapping_config:
+                source = mapping_config.get('source', {}).get('name') or mapping_config.get('source_type') or "unknown"
+                destination = mapping_config.get('schema_slug') or mapping_config.get('schema', {}).get('slug') or "unknown"
+            
+            # Construir payload
+            payload = telemetry.build_payload(
+                event_type=event_type,
+                status=status,
+                source=source,
+                destination=destination,
+                **kwargs
+            )
+            
+            # Enviar (sem bloquear ou falhar o processo principal)
+            # Como send_healthcheck é síncrono (requests), isso adiciona latência.
+            # Idealmente seria async, mas Runner é async def, http_client é sync.
+            # Para evitar travar loop, poderíamos usar thread, mas vamos manter simples por enquanto.
+            success, msg = http_client.send_healthcheck(secret="", payload=payload, token=token)
+            if not success:
+               self.logger.warning(f"⚠️ Falha no envio de telemetria ({event_type}): {msg}")
+
+        except Exception as e:
+            self.logger.warning(f"⚠️ Erro ao processar telemetria: {e}")
         
     async def sync_mapping(self, mapping_name: str) -> SyncResult:
         """
@@ -139,6 +181,14 @@ class SyncRunner:
                 self.logger.info(f"[DEBUG] Teste de conexão concluído")
             else:
                 self.logger.info(f"[DEBUG] Pulando validação de conexão (skip_validation=True)")
+            
+            # Telemetria: Run Start
+            self._send_telemetry(
+                event_type="run_start",
+                status="success", # Start é sempre success se chegou aqui
+                mapping_config=mapping_config
+            )
+
             
             # Extrair dados
             self.logger.info(f"[DEBUG] Iniciando extração de dados...")
@@ -256,6 +306,18 @@ class SyncRunner:
                 f"{format_duration(timer.elapsed())})"
             )
             
+            # Telemetria: Run End
+            self._send_telemetry(
+                event_type="run_end",
+                status="success" if sync_success else "error",
+                mapping_config=mapping_config,
+                duration_ms=int(timer.elapsed() * 1000),
+                items_processed=total_records,
+                bytes_uploaded=total_size if 'total_size' in locals() else 0,
+                retry_count=total_retries if 'total_retries' in locals() else 0,
+                error_message=None if sync_success else "Falha no upload"
+            )
+
             return result
             
         except Exception as e:
@@ -272,6 +334,19 @@ class SyncRunner:
             self.state_store.finish_sync_error(mapping_name, error_msg)
             self.metrics.finish_sync_metrics(success=False, error_message=error_msg)
             
+            # Telemetria: Error
+            # Tentar carregar mapping_config se não existir (para contexto)
+            current_config = locals().get('mapping_config')
+            
+            self._send_telemetry(
+                event_type="error",
+                status="error",
+                mapping_config=current_config,
+                duration_ms=int(timer.elapsed() * 1000),
+                error_message=error_msg,
+                error_stack=str(e) # stacktrace seria melhor, mas msg serve por enquanto
+            )
+
             return SyncResult(
                 mapping_name=mapping_name,
                 success=False,

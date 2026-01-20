@@ -5,6 +5,7 @@ CLI principal do DataSnap Bridge
 
 import asyncio
 import os
+import time
 import typer
 from pathlib import Path
 from rich.console import Console
@@ -312,6 +313,87 @@ def status():
         
     except Exception as e:
         console.print(f"[red]❌ Erro ao verificar status: {e}[/red]")
+        raise typer.Exit(1)
+
+
+@app.command()
+def monitor(
+    interval: int = typer.Option(60, "--interval", "-i", help="Intervalo em segundos entre pings"),
+    secret: Optional[str] = typer.Option(None, "--secret", "-s", help="Segredo do Bridge (opcional, lê de env BRIDGE_APP_SECRET)")
+):
+    """
+    Inicia o monitoramento contínuo (Health Check)
+    
+    Envia um ping "heartbeat" para a API a cada intervalo definido.
+    Utiliza a API Key cadastrada (via 'bridge setup') ou o segredo informado.
+    """
+    from core.http import http_client
+    from core.telemetry import telemetry
+    from core.secrets_store import secrets_store
+    
+    # 1. Tentar obter Token do Secrets Store (Prioridade)
+    token = None
+    try:
+        secrets_store.load()
+        keys = secrets_store.list_keys()
+        if keys:
+            # Usa a primeira chave disponível
+            token = keys[0].token
+            logger.info(f"🔑 Usando API Key: {keys[0].name}")
+    except Exception as e:
+        logger.warning(f"⚠️ Erro ao carregar API Keys: {e}")
+
+    # 2. Fallback para Segredo/Token via argumento ou ENV
+    bridge_secret = secret or os.getenv("BRIDGE_APP_SECRET")
+    
+    if not token and not bridge_secret:
+        console.print("[red]❌ Erro: Nenhuma credencial encontrada.[/red]")
+        console.print("Execute [bold]bridge setup[/bold] para cadastrar uma API Key ou defina BRIDGE_APP_SECRET.")
+        raise typer.Exit(1)
+        
+    # Se temos um secret mas não token, podemos tentar usar o secret como token (se for Bearer)
+    # ou passar como secret legacy. Vamos passar ambos para send_healthcheck decidir/usar.
+    
+    console.print(f"[bold blue]💓 Iniciando monitoramento (heartbeat a cada {interval}s)...[/bold blue]")
+    logger.info(f"Monitoramento iniciado. Intervalo: {interval}s")
+    
+    try:
+        while True:
+            # Construir payload de heartbeat
+            payload = telemetry.build_payload(
+                event_type="heartbeat",
+                status="success",
+                source="datasnap-bridge", # Default source para monitor
+                destination="datasnap-cloud"
+            )
+            
+            # Enviar healthcheck
+            success, message = http_client.send_healthcheck(
+                secret=bridge_secret if bridge_secret else "",
+                payload=payload,
+                token=token 
+            )
+            
+            timestamp = time.strftime("%H:%M:%S")
+            if success:
+                console.print(f"[{timestamp}] [green]✅ Heartbeat enviado com sucesso[/green]")
+                logger.debug("Heartbeat enviado com sucesso")
+            else:
+                console.print(f"[{timestamp}] [red]❌ Falha no heartbeat: {message}[/red]")
+                # Se falhar por 401, talvez devêssemos avisar
+                if "401" in message:
+                    console.print("[yellow]⚠️  Erro de autenticação. Verifique suas chaves.[/yellow]")
+                logger.error(f"Falha no heartbeat: {message}")
+                
+            time.sleep(interval)
+            
+    except KeyboardInterrupt:
+        console.print("\n[yellow]👋 Monitoramento interrompido[/yellow]")
+        logger.info("Monitoramento interrompido pelo usuário")
+        raise typer.Exit(0)
+    except Exception as e:
+        logger.exception(f"Erro fatal no monitoramento: {e}")
+        console.print(f"[red]💥 Erro fatal: {e}[/red]")
         raise typer.Exit(1)
 
 

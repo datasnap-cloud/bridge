@@ -302,6 +302,57 @@ class DataSnapHTTPClient:
         except requests.RequestException as e:
             return False, f"Erro de rede: {e}"
 
+    def send_healthcheck(self, secret: str, status: str = "success", error_message: Optional[str] = None, payload: Optional[Dict[str, Any]] = None, token: Optional[str] = None) -> Tuple[bool, str]:
+        """
+        Envia um ping de healthcheck para a API
+        
+        Args:
+            secret: Segredo compartilhado (legado/compatibilidade)
+            status: Status da execução (success/error) - usado se payload for None
+            error_message: Mensagem de erro (opcional) - usado se payload for None
+            payload: Payload completo para telemetria avançada (opcional)
+            token: Token de autenticação (Bearer) - se não fornecido, tenta usar self.token
+            
+        Returns:
+            Tuple[bool, str]: (success, message)
+        """
+        try:
+            if payload:
+                # Usar payload fornecido
+                data = payload
+            else:
+                # Construir payload simples (legado)
+                data = {
+                    "status": status,
+                    "source": "datasnap-bridge",
+                    "destination": "datasnap-cloud",
+                    "error_message": error_message
+                }
+            
+            # Adicionar segredo no header (legado/compatibilidade)
+            if secret:
+                self.session.headers.update({"X-Bridge-Secret": secret})
+            
+            status_code, response_data = self._make_request(
+                method="POST",
+                endpoint="v1/bridge/healthcheck",
+                data=data,
+                token=token
+            )
+            
+            # Remover segredo do header após uso
+            if "X-Bridge-Secret" in self.session.headers:
+                del self.session.headers["X-Bridge-Secret"]
+            
+            if status_code in [200, 201]:
+                return True, "Healthcheck enviado com sucesso"
+            else:
+                message = response_data.get("message", f"Erro HTTP {status_code}")
+                return False, f"Erro ao enviar healthcheck: {message}"
+                
+        except requests.RequestException as e:
+            return False, f"Erro de rede: {e}"
+
 
 # Instância global do cliente HTTP
 http_client = DataSnapHTTPClient()

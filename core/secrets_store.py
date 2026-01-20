@@ -19,6 +19,7 @@ class APIKey:
     name: str
     token: str
     created_at: str
+    bridge_name: Optional[str] = None
     
     def get_masked_token(self) -> str:
         """
@@ -87,6 +88,7 @@ class SecretsStore:
             # Carregar keys
             self._keys = []
             for key_data in decrypted_data.get("keys", []):
+                # Ensure compatibility with older records
                 if all(field in key_data for field in ["name", "token", "created_at"]):
                     self._keys.append(APIKey(**key_data))
             
@@ -122,18 +124,19 @@ class SecretsStore:
             logger.exception(f"❌ Erro ao salvar API Keys: {e}")
             raise Exception(f"Erro ao salvar API Keys: {e}")
     
-    def add_key(self, name: str, token: str) -> None:
+    def add_key(self, name: str, token: str, bridge_name: Optional[str] = None) -> None:
         """
         Adiciona uma nova API Key
         
         Args:
             name: Nome da API Key
             token: Token da API Key
+            bridge_name: Nome do Bridge (opcional)
             
         Raises:
             ValueError: Se já existe uma key com o mesmo nome
         """
-        logger.debug(f"🔑 Adicionando nova API Key: {name}")
+        logger.debug(f"🔑 Adicionando nova API Key: {name} (Bridge: {bridge_name})")
         if not self._loaded:
             self.load()
         
@@ -146,7 +149,8 @@ class SecretsStore:
         new_key = APIKey(
             name=name,
             token=token,
-            created_at=datetime.utcnow().isoformat() + "Z"
+            created_at=datetime.utcnow().isoformat() + "Z",
+            bridge_name=bridge_name
         )
         
         self._keys.append(new_key)

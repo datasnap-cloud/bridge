@@ -58,7 +58,14 @@ def register_api_key() -> bool:
                 continue
             break
         
+        # Solicitar bridge_name (opcional, mas recomendado)
+        bridge_name = Prompt.ask("Nome do Bridge (ex: prod-db-01)").strip()
+        if not bridge_name:
+            bridge_name = None
+        
         logger.debug(f"🔑 Token informado: {token[:10]}...")
+        if bridge_name:
+             logger.debug(f"🌉 Nome do Bridge: {bridge_name}")
         
         # Validar token
         console.print("\n[yellow]🔍 Validando token...[/yellow]")
@@ -76,10 +83,12 @@ def register_api_key() -> bool:
         # Salvar token
         logger.debug("💾 Salvando API Key no secrets store")
         console.print("[yellow]💾 Salvando...[/yellow]")
-        secrets_store.add_key(name, token)
+        secrets_store.add_key(name, token, bridge_name=bridge_name)
         
         logger.info(f"✅ API Key '{name}' cadastrada com sucesso")
         console.print(f"[green]✅ API Key cadastrada: {name}[/green]")
+        if bridge_name:
+            console.print(f"[dim]   Bridge Name: {bridge_name}[/dim]")
         return True
         
     except KeyboardInterrupt:
@@ -118,6 +127,7 @@ def list_api_keys() -> bool:
         table = Table(show_header=True, header_style="bold magenta")
         table.add_column("#", style="dim", width=3)
         table.add_column("Nome", style="cyan")
+        table.add_column("Bridge Name", style="blue")
         table.add_column("Token (final)", style="yellow", width=12)
         table.add_column("Criado em", style="green")
         
@@ -125,6 +135,7 @@ def list_api_keys() -> bool:
             table.add_row(
                 str(i),
                 key.name,
+                key.bridge_name or "-",
                 key.get_masked_token(),
                 key.get_formatted_created_at()
             )
