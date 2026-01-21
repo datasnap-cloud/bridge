@@ -581,3 +581,9 @@ def _show_data_flow() -> None:
     except Exception as e:
         logger.warning(f"Erro ao exibir fluxo de dados: {e}")
         # Não exibir erro para o usuário, apenas log
+
+
+def wait_for_continue():
+    """Pausa a execução até o usuário pressionar Enter"""
+    console.print("\n[dim]Pressione Enter para continuar...[/dim]")
+    input()
