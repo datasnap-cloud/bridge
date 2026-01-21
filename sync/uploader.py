@@ -233,6 +233,13 @@ class FileUploader:
                 retry_count = attempt
                 logger.warning(f"💥 Tentativa {attempt + 1} falhou: {e}")
                 
+                # Invalidar cache se for erro de autenticação ou não encontrado
+                if isinstance(e, requests.exceptions.HTTPError) and e.response is not None:
+                    status = e.response.status_code
+                    if status in [401, 403, 404]:
+                        logger.warning(f"⚠️ Erro {status} detectado. Invalidando token em cache para tentar renovação.")
+                        self.token_cache.invalidate_token(schema_slug, mapping_name)
+
                 if attempt < self.max_retries:
                     wait_time = 2 ** attempt  # Backoff exponencial
                     logger.info(f"⏳ Aguardando {wait_time}s antes da próxima tentativa...")
