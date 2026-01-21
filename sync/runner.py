@@ -388,7 +388,12 @@ class SyncRunner:
                     if resolved_config:
                         log_path = resolved_config.get('path') or resolved_config.get('file_path')
                     
-                    truncate = source_config_raw.get('truncate_after_sync', True)  # Default: truncar
+                    # Respeitar a configuração global 'delete_after_upload'
+                    transfer_config = mapping_config.get('transfer', {})
+                    # Prioridade: transfer.delete_after_upload (se definido), senão source.truncate_after_sync
+                    truncate = transfer_config.get('delete_after_upload')
+                    if truncate is None:
+                        truncate = source_config_raw.get('truncate_after_sync', False)
                     
                     if log_path and truncate:
                         try:
