@@ -208,6 +208,21 @@ class SyncRunner:
             
             if not records:
                 self.logger.warning(f"Nenhum registro encontrado para o mapeamento: {mapping_name}")
+                
+                # Telemetria: Run End (Empty)
+                run_id_val = self._run_ids.get(mapping_name)
+                self._send_telemetry(
+                    event_type="run_end",
+                    status="success",
+                    mapping_config=mapping_config,
+                    duration_ms=int(timer.elapsed() * 1000),
+                    items_processed=0,
+                    bytes_uploaded=0,
+                    retry_count=0,
+                    error_message="Nenhum registro encontrado",
+                    id=run_id_val
+                )
+                
                 return SyncResult(
                     mapping_name=mapping_name,
                     success=True,
