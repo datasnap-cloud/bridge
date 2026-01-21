@@ -213,12 +213,26 @@ class SyncRunner:
             if min_records_for_upload > 0 and records_count < min_records_for_upload:
                 self.logger.info(f"📊 Registros encontrados: {records_count}")
                 self.logger.info(f"📋 Mínimo necessário: {min_records_for_upload}")
-                self.logger.warning(f"⚠️  Upload cancelado: número de registros ({records_count}) é menor que o mínimo configurado ({min_records_for_upload})")
+                msg = f"Upload cancelado: {records_count} registros encontrados, mínimo necessário: {min_records_for_upload}"
+                self.logger.warning(f"⚠️  {msg}")
+
+                # Telemetria: Run End (Skipped)
+                self._send_telemetry(
+                    event_type="run_end",
+                    status="success", # Considerado sucesso (skipped)
+                    mapping_config=mapping_config,
+                    duration_ms=int(timer.elapsed() * 1000),
+                    items_processed=records_count,
+                    bytes_uploaded=0,
+                    retry_count=0,
+                    error_message=msg
+                )
+
                 return SyncResult(
                     mapping_name=mapping_name,
                     success=True,
                     duration_seconds=timer.elapsed(),
-                    error_message=f"Upload cancelado: {records_count} registros encontrados, mínimo necessário: {min_records_for_upload}"
+                    error_message=msg
                 )
             
             self.logger.info(f"✅ Validação de número mínimo passou: {records_count} registros (mínimo: {min_records_for_upload})")
