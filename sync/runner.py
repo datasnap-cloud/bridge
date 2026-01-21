@@ -16,7 +16,7 @@ from core.paths import BridgePaths
 from core.secrets_store import secrets_store
 from core.timeutil import Timer, get_current_timestamp, format_duration
 from datasnap.api import DataSnapAPI
-from sync.extractor import extract_mapping_data, test_source_connection
+from sync.extractor import extract_mapping_data, test_source_connection, _resolve_source_config
 from sync.jsonl_writer import JSONLBatchWriter, JSONLFileInfo
 from sync.metrics import get_metrics_collector
 from sync.token_cache import TokenCache
@@ -251,8 +251,8 @@ class SyncRunner:
             
             if min_records_for_upload > 0 and records_count < min_records_for_upload:
                 source_name = mapping_config.get('source', {}).get('name', 'N/A')
-                dest_name = mapping_config.get('destination', {}).get('name', 'N/A')
-                self.logger.info(f"📊 Registros encontrados: {records_count}")
+                dest_name = mapping_config.get('schema', {}).get('name', mapping_config.get('destination', {}).get('name', 'N/A'))
+                self.logger.info(f"📊 Registros encontrados para {mapping_name}: {records_count}")
                 self.logger.info(f"📋 Mínimo necessário: {min_records_for_upload}")
                 
                 msg = f"Upload skip: {mapping_name} ({source_name} ➔ {dest_name}) | {records_count} registros encontrados, mínimo necessário: {min_records_for_upload}"
@@ -335,11 +335,14 @@ class SyncRunner:
                 await self._handle_delete_after_upload(mapping_config, records, mapping_name)
                 
                 # Limpar Laravel log após upload bem-sucedido
-                source_config = mapping_config.get('source', {})
-                source_type = source_config.get('type')
+                source_config_raw = mapping_config.get('source', {})
+                source_type = source_config_raw.get('type')
+                
                 if source_type == 'laravel_log':
-                    log_path = source_config.get('path') or source_config.get('file_path')
-                    truncate = source_config.get('truncate_after_sync', True)  # Default: truncar
+                    # Resolvemos a config para pegar o path real do datasource
+                    resolved_config = _resolve_source_config(mapping_config)
+                    log_path = resolved_config.get('path') or resolved_config.get('file_path') if resolved_config else None
+                    truncate = source_config_raw.get('truncate_after_sync', True)  # Default: truncar
                     
                     if log_path and truncate:
                         try:
@@ -349,7 +352,7 @@ class SyncRunner:
                             path_obj = Path(log_path)
                             size_before = path_obj.stat().st_size if path_obj.exists() else 0
                             
-                            self.logger.info(f"🧹 Tentando limpar arquivo de log: {log_path} (Tamanho atual: {size_before} bytes)")
+                            self.logger.warning(f"🧹 Tentando limpar arquivo de log: {log_path} (Tamanho atual: {size_before} bytes)")
                             
                             # Trunca o arquivo de log
                             with open(log_path, 'w') as f:
@@ -362,9 +365,11 @@ class SyncRunner:
                             if offset_file.exists():
                                 offset_file.unlink()
                             
-                            self.logger.info(f"✅ Arquivo de log limpo com sucesso! Tamanho: {size_before} bytes ➔ {size_after} bytes")
+                            self.logger.warning(f"✅ Arquivo de log limpo com sucesso! Tamanho: {size_before} bytes ➔ {size_after} bytes")
                         except Exception as e:
                             self.logger.warning(f"❌ Erro ao tentar limpar arquivo de log: {e}")
+                    else:
+                        self.logger.debug(f"ℹ️ Limpeza de log ignorada: Path={log_path}, Truncate={truncate}")
             
             # Atualizar watermark se houver registros e modo incremental
             if total_records > 0:
@@ -604,8 +609,12 @@ class SyncRunner:
     
     async def _extract_data(self, mapping_config: Dict) -> List[Dict]:
         """Extrai dados da fonte."""
+        mapping_name = mapping_config.get('name', 'N/A')
+        source_name = mapping_config.get('source', {}).get('name', 'N/A')
+        dest_name = mapping_config.get('schema', {}).get('name', 'N/A')
+        
         try:
-            self.logger.info(f"📊 Iniciando extração de dados...")
+            self.logger.warning(f"📊 Iniciando extração: {mapping_name} ({source_name} ➔ {dest_name})")
             self.logger.debug(f"🔧 Configuração: {mapping_config.get('source_type', 'N/A')} -> {mapping_config.get('table_name', 'N/A')}")
             
             extraction_result = await asyncio.to_thread(
