@@ -141,6 +141,22 @@ class SyncRunner:
         """
         self.logger.info(f"[DEBUG] sync_mapping iniciado para: {mapping_name}")
         
+        # Enviar heartbeat incondicional no início do sync
+        try:
+            hb_response = self._send_telemetry(
+                event_type="heartbeat",
+                status="success",
+                # Opcional: passar mapping_config se disponível ou None (telemetry usa defaults)
+                # Como ainda não carregamos a config, deixamos a telemetria resolver o nome do bridge
+            )
+            # Verifica se houve retorno (None indica falha no _send_telemetry)
+            if not hb_response:
+                print(f"❌ Erro ao enviar heartbeat inicial (verifique os logs para detalhes)")
+        except Exception as e:
+            # Garante que o erro apareça no console conforme solicitado
+            print(f"❌ Erro ao enviar heartbeat inicial: {e}")
+            self.logger.warning(f"Falha no heartbeat inicial: {e}")
+        
         if mapping_name in self._running_syncs:
             self.logger.info(f"[DEBUG] Sincronização já em execução para {mapping_name}")
             return SyncResult(
