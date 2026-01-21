@@ -1089,6 +1089,18 @@ def test_source_connection(source_config: Dict[str, Any]) -> Tuple[bool, str]:
 
 
 def _extract_laravel_log_records(source_config: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """
+    Extrai registros de um arquivo laravel.log.
+    
+    Suporta:
+    - Tracking de offset para evitar reprocessamento
+    - Truncamento opcional após sucesso (via config)
+    
+    Config options:
+    - path/file_path: Caminho do arquivo de log
+    - max_memory_mb: Limite de memória em MB (default: 50)
+    - truncate_after_sync: Se True, trunca o arquivo após upload bem-sucedido
+    """
     path = source_config.get('path') or source_config.get('file_path')
     if not path:
         raise ValueError("Caminho do arquivo de log não especificado")
@@ -1097,31 +1109,60 @@ def _extract_laravel_log_records(source_config: Dict[str, Any]) -> List[Dict[str
     chunk_size = max_mb * 1024 * 1024
     records: List[Dict[str, Any]] = []
     
+    # Arquivo de offset para tracking
+    offset_file = Path(path).with_suffix('.offset')
+    last_offset = 0
+    
+    # Lê offset anterior se existir
+    if offset_file.exists():
+        try:
+            last_offset = int(offset_file.read_text().strip())
+            logger.info(f"📍 Retomando leitura do offset: {last_offset} bytes")
+        except (ValueError, IOError):
+            last_offset = 0
+    
     # Regex para identificar início de log: [2024-01-01 10:00:00] env.TYPE:
     start_re = re.compile(r"^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s+([^\.]+)\.([A-Za-z]+):\s?", re.MULTILINE)
     
     if not os.path.exists(path):
         raise FileNotFoundError(f"Arquivo de log não encontrado: {path}")
-        
+    
+    # Verifica se arquivo foi rotacionado (menor que offset anterior)
+    file_size = os.path.getsize(path)
+    if file_size < last_offset:
+        logger.info(f"📄 Arquivo parece ter sido rotacionado (tamanho atual: {file_size}, offset anterior: {last_offset}). Reiniciando do início.")
+        last_offset = 0
+    
+    current_offset = last_offset
+    
     with open(path, 'rb') as f:
+        # Pula para o offset anterior
+        if last_offset > 0:
+            f.seek(last_offset)
+        
         while True:
             chunk = f.read(chunk_size)
             if not chunk:
                 break
+            
             text = chunk.decode('utf-8', errors='ignore')
             positions = []
+            
             for m in start_re.finditer(text):
                 positions.append((m.start(), m.end(), m.group(1), m.group(2), m.group(3)))
+            
             if not positions:
                 peek = f.read(1)
                 if peek:
                     f.seek(f.tell() - 1, os.SEEK_SET)
                 continue
+            
             last_index = len(positions)
             peek = f.read(1)
             if peek:
                 f.seek(f.tell() - 1, os.SEEK_SET)
                 last_index -= 1
+            
             for i in range(0, max(last_index, 0)):
                 start, end, dt, env, typ = positions[i]
                 msg_start = end
@@ -1154,4 +1195,61 @@ def _extract_laravel_log_records(source_config: Dict[str, Any]) -> List[Dict[str
                     'message': message,
                     'stacktrace': stacktrace
                 })
+        
+        # Salva offset atual
+        current_offset = f.tell()
+    
+    # Salva o offset para próxima execução (será feito após upload bem-sucedido)
+    # Por enquanto, salvamos em memória para ser commitado pelo runner
+    source_config['_new_offset'] = current_offset
+    source_config['_offset_file'] = str(offset_file)
+    
+    logger.info(f"📊 Extraídos {len(records)} novos registros de log (offset: {last_offset} -> {current_offset})")
+    
     return records
+
+
+def commit_laravel_log_offset(source_config: Dict[str, Any], truncate: bool = False) -> None:
+    """
+    Confirma o offset do Laravel log após upload bem-sucedido.
+    Opcionalmente trunca o arquivo se configurado.
+    
+    Args:
+        source_config: Configuração da fonte com _new_offset e _offset_file
+        truncate: Se True, trunca o arquivo ao invés de salvar offset
+    """
+    new_offset = source_config.get('_new_offset')
+    offset_file = source_config.get('_offset_file')
+    path = source_config.get('path') or source_config.get('file_path')
+    
+    if new_offset is None or not offset_file:
+        return
+    
+    truncate_after_sync = source_config.get('truncate_after_sync', False) or truncate
+    
+    if truncate_after_sync and path:
+        try:
+            # Trunca o arquivo (remove todos os logs processados)
+            with open(path, 'w') as f:
+                f.truncate(0)
+            
+            # Remove arquivo de offset já que truncamos
+            if Path(offset_file).exists():
+                Path(offset_file).unlink()
+            
+            logger.info(f"🧹 Arquivo de log truncado após sync bem-sucedido: {path}")
+        except Exception as e:
+            logger.warning(f"⚠️ Não foi possível truncar arquivo de log: {e}")
+            # Fallback: salva offset
+            try:
+                Path(offset_file).write_text(str(new_offset))
+            except Exception:
+                pass
+    else:
+        # Salva offset para próxima execução
+        try:
+            Path(offset_file).write_text(str(new_offset))
+            logger.debug(f"📍 Offset salvo: {new_offset} em {offset_file}")
+        except Exception as e:
+            logger.warning(f"⚠️ Não foi possível salvar offset: {e}")
+

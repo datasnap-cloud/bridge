@@ -328,6 +328,15 @@ class SyncRunner:
             # Deletar registros do banco se delete_after_upload estiver habilitado e upload foi bem-sucedido
             if upload_success and total_records > 0:
                 await self._handle_delete_after_upload(mapping_config, records, mapping_name)
+                
+                # Commit Laravel log offset se for fonte de logs
+                source_config = mapping_config.get('source', {})
+                source_type = source_config.get('type')
+                if source_type == 'laravel_log':
+                    from sync.extractor import commit_laravel_log_offset
+                    truncate = source_config.get('truncate_after_sync', False)
+                    commit_laravel_log_offset(source_config, truncate=truncate)
+                    self.logger.info(f"✅ Offset/cleanup de Laravel log confirmado")
             
             # Atualizar watermark se houver registros e modo incremental
             if total_records > 0:
