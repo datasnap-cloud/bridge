@@ -141,22 +141,6 @@ class SyncRunner:
         """
         self.logger.info(f"[DEBUG] sync_mapping iniciado para: {mapping_name}")
         
-        # Enviar heartbeat incondicional no início do sync
-        try:
-            hb_response = self._send_telemetry(
-                event_type="heartbeat",
-                status="success",
-                # Opcional: passar mapping_config se disponível ou None (telemetry usa defaults)
-                # Como ainda não carregamos a config, deixamos a telemetria resolver o nome do bridge
-            )
-            # Verifica se houve retorno (None indica falha no _send_telemetry)
-            if not hb_response:
-                print(f"❌ Erro ao enviar heartbeat inicial (verifique os logs para detalhes)")
-        except Exception as e:
-            # Garante que o erro apareça no console conforme solicitado
-            print(f"❌ Erro ao enviar heartbeat inicial: {e}")
-            self.logger.warning(f"Falha no heartbeat inicial: {e}")
-        
         if mapping_name in self._running_syncs:
             self.logger.info(f"[DEBUG] Sincronização já em execução para {mapping_name}")
             return SyncResult(
@@ -977,6 +961,31 @@ async def run_sync_command(
     logger = logging.getLogger(__name__)
     logger.info(f"[DEBUG] run_sync_command iniciado com mapping_names: {mapping_names}, all_mappings: {all_mappings}, dry_run: {dry_run}")
     
+    # Enviar heartbeat único por execução do comando
+    try:
+        # Tenta obter token silenciosamente
+        token = None
+        try:
+            keys = secrets_store.list_keys()
+            if keys:
+                token = keys[0].token
+        except:
+            pass
+
+        hb_payload = telemetry.build_payload(
+            event_type="heartbeat",
+            status="success",
+            source="datasnap-bridge",
+            destination="datasnap-cloud"
+        )
+        
+        success, _ = http_client.send_healthcheck(secret="", payload=hb_payload, token=token)
+        if not success:
+             print(f"❌ Erro ao enviar heartbeat (verifique os logs)")
+    except Exception as e:
+        print(f"❌ Erro ao enviar heartbeat: {e}")
+        logger.warning(f"Falha no heartbeat inicial do comando: {e}")
+
     try:
         logger.info(f"[DEBUG] Verificando config...")
         if not config:
