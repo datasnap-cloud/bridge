@@ -20,6 +20,71 @@ from core.logger import logger
 console = Console()
 
 
+def run_api_keys_menu() -> bool:
+    """
+    Menu de gerenciamento de API Keys
+    """
+    while True:
+        console.clear()
+        console.print("\n[bold blue]🔑 Gerenciamento de API Keys[/bold blue]")
+        console.print("─" * 60)
+        
+        # Listar keys atuais
+        keys = secrets_store.list_keys()
+        if not keys:
+            console.print("[dim]Nenhuma API Key cadastrada.[/dim]")
+            console.print("\n[bold]Opções:[/bold]")
+            console.print("[1] Cadastrar Nova Key")
+            console.print("[0] Voltar")
+            
+            choice = Prompt.ask("Escolha uma opção", choices=["1", "0"], default="1")
+            
+            if choice == "0":
+                return True
+            elif choice == "1":
+                register_api_key()
+                
+        else:
+            # Exibir tabela simplificada
+            _display_api_keys_table(keys)
+            
+            console.print("\n[bold]Opções:[/bold]")
+            console.print("[1] Cadastrar Nova Key")
+            console.print("[2] Editar Key")
+            console.print("[3] Excluir Key")
+            console.print("[0] Voltar")
+            
+            choice = Prompt.ask("Escolha uma opção", choices=["0", "1", "2", "3"], default="0")
+            
+            if choice == "0":
+                return True
+            elif choice == "1":
+                register_api_key()
+            elif choice == "2":
+                edit_api_key(keys)
+            elif choice == "3":
+                _delete_api_key_interactive(keys)
+
+def _display_api_keys_table(keys: List[APIKey]):
+    """Helper para exibir tabela de keys"""
+    table = Table(show_header=True, header_style="bold magenta")
+    table.add_column("#", style="dim", width=3)
+    table.add_column("Nome", style="cyan")
+    table.add_column("Bridge Name", style="blue")
+    table.add_column("Token (final)", style="yellow", width=12)
+    table.add_column("Criado em", style="green")
+    
+    for i, key in enumerate(keys, 1):
+        table.add_row(
+            str(i),
+            key.name,
+            key.bridge_name or "-",
+            key.get_masked_token(),
+            key.get_formatted_created_at()
+        )
+    console.print(table)
+
+
 def register_api_key() -> bool:
     """
     Registra uma nova API Key
@@ -103,7 +168,65 @@ def register_api_key() -> bool:
         return False
 
 
-def list_api_keys() -> bool:
+def edit_api_key(keys: List[APIKey]) -> bool:
+    """
+    Interface para editar uma API Key
+    """
+    console.print("\n[bold cyan]✏️ Editar API Key[/bold cyan]")
+    
+    # Selecionar Key
+    while True:
+        index_str = Prompt.ask("Número da Key para editar (0 para cancelar)").strip()
+        if index_str == "0":
+            return False
+            
+        try:
+            index = int(index_str)
+            if 1 <= index <= len(keys):
+                break
+            else:
+                console.print(f"[red]❌ Número inválido[/red]")
+        except ValueError:
+             console.print("[red]❌ Digite um número válido[/red]")
+             
+    target_key = keys[index - 1]
+    console.print(f"\nEditando: [bold]{target_key.name}[/bold]")
+    console.print("[dim]Pressione Enter para manter o valor atual[/dim]")
+    
+    try:
+        # Novo Nome (opcional)
+        new_name = Prompt.ask(f"Novo Nome", default=target_key.name).strip()
+        
+        # Novo Bridge Name (opcional)
+        current_bridge = target_key.bridge_name or ""
+        # Logica: se user der enter, mantem default (current_bridge). 
+        # Para limpar, user teria que digitar algo especifico? 
+        # Vamos assumir que Enter mantem. Para limpar, user digita "none" ou "clear"? 
+        # Simplificacao: Enter mantem. Espaço vazio mantem.
+        new_bridge_name = Prompt.ask(f"Novo Bridge Name", default=current_bridge).strip()
+        
+        # Novo Token (opcional)
+        new_token = Prompt.ask("Novo Token (deixe vazio para manter)", password=True).strip()
+        
+        # Confirmar
+        if Confirm.ask("Salvar alterações?"):
+            secrets_store.update_key(
+                current_name=target_key.name,
+                new_name=new_name if new_name != target_key.name else None,
+                new_token=new_token if new_token else None,
+                new_bridge_name=new_bridge_name if new_bridge_name != current_bridge else None
+            )
+            console.print("[green]✅ Key atualizada com sucesso![/green]")
+            wait_for_continue()
+            return True
+            
+    except Exception as e:
+        console.print(f"[red]❌ Erro ao atualizar: {e}[/red]")
+        wait_for_continue()
+        
+    return False
+
+def _unused_list_api_keys() -> bool:
     """
     Lista todas as API Keys cadastradas
     

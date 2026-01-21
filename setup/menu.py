@@ -11,7 +11,7 @@ from rich.text import Text
 from core.secrets_store import secrets_store
 from core.datasources_store import datasources_store
 from core.logger import logger
-from setup.actions import register_api_key, list_api_keys, list_schemas, show_statistics
+from setup.actions import run_api_keys_menu, list_schemas, show_statistics
 from setup.datasources_menu import run_datasources_menu
 from setup.mappings_menu import run_mappings_menu
 from setup.mappings_manager import run_mappings_manager
@@ -101,7 +101,7 @@ def _show_main_menu() -> bool:
         
         # Menu de opções
         menu_options: Dict[str, Callable[[], bool]] = {
-            "1": register_api_key,
+            "1": run_api_keys_menu,
             "2": list_schemas,
             "3": run_datasources_menu,
             "4": run_mappings_menu,

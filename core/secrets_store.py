@@ -155,8 +155,53 @@ class SecretsStore:
         
         self._keys.append(new_key)
         logger.debug(f"💾 Salvando API Key {name} no arquivo criptografado")
+    def update_key(self, current_name: str, new_name: Optional[str] = None, new_token: Optional[str] = None, new_bridge_name: Optional[str] = None) -> None:
+        """
+        Atualiza uma API Key existente.
+        
+        Args:
+            current_name: Nome atual da API Key
+            new_name: Novo nome (opcional)
+            new_token: Novo token (opcional)
+            new_bridge_name: Novo nome do bridge (opcional)
+            
+        Raises:
+            ValueError: Se a chave não for encontrada ou novo nome já existir
+        """
+        logger.debug(f"🔄 Atualizando API Key: {current_name}")
+        if not self._loaded:
+            self.load()
+            
+        # Encontrar chave
+        key_index = -1
+        for i, key in enumerate(self._keys):
+            if key.name == current_name:
+                key_index = i
+                break
+        
+        if key_index == -1:
+            raise ValueError(f"API Key '{current_name}' não encontrada")
+            
+        # Verificar duplicidade se nome mudar
+        if new_name and new_name != current_name:
+            if any(k.name == new_name for k in self._keys):
+                raise ValueError(f"Já existe uma API Key com o nome '{new_name}'")
+            self._keys[key_index].name = new_name
+            
+        # Atualizar outros campos
+        if new_token:
+            self._keys[key_index].token = new_token
+            
+        if new_bridge_name is not None:
+             # Permite definir como string ou None se string vazia for passada (dependendo da lógica de UI)
+             # Na UI, se passar "", deve virar None? Pela tipagem aqui, assumimos que quem chama trata.
+             # Se for passado algo, atualiza.
+             self._keys[key_index].bridge_name = new_bridge_name
+
+        logger.debug(f"💾 Salvando alterações na API Key")
         self.save()
-        logger.info(f"✅ API Key '{name}' adicionada com sucesso")
+        logger.info(f"✅ API Key '{new_name or current_name}' atualizada com sucesso")
+
     
     def delete_key(self, name: str) -> bool:
         """
