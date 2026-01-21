@@ -419,14 +419,14 @@ class FileUploader:
         logger.info(f"📡 Status da resposta: {response.status_code}")
         logger.info(f"📝 Headers da resposta: {dict(response.headers)}")
         if response.status_code != 200:
-            logger.error(f"❌ Erro no upload - Status: {response.status_code}")
-            logger.error(f"📄 Conteúdo da resposta: {response.text}")
+            logger.warning(f"❌ Erro no upload - Status: {response.status_code}")
+            logger.warning(f"📄 Conteúdo da resposta: {response.text}")
         else:
             logger.info(f"✅ Upload realizado com sucesso!")
         
         response.raise_for_status()
         
-        logger.info(f"✅ Upload concluído com sucesso: {file_info.file_path.name}")
+        logger.warning(f"✅ Upload concluído com sucesso: {file_info.file_path.name}")
         logger.debug(f"🎯 Upload ID retornado: {upload_id}")
         return upload_id
     
@@ -544,7 +544,10 @@ class BatchUploader:
         successful = sum(1 for r in results if r.success)
         failed = len(results) - successful
         
-        logger.info(f"Upload em lote concluído: {successful} sucessos, {failed} falhas")
+        if failed > 0:
+            logger.warning(f"📊 Upload em lote concluído para {mapping_name or 'N/A'}: {successful} sucessos, {failed} falhas")
+        else:
+            logger.info(f"📊 Upload em lote concluído para {mapping_name or 'N/A'}: {successful} sucessos, {failed} falhas")
         
         return results
     
