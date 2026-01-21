@@ -345,7 +345,7 @@ class DataSnapHTTPClient:
                 del self.session.headers["X-Bridge-Secret"]
             
             if status_code in [200, 201]:
-                return True, "Healthcheck enviado com sucesso"
+                return True, response_data
             else:
                 message = response_data.get("message", f"Erro HTTP {status_code}")
                 return False, f"Erro ao enviar healthcheck: {message}"

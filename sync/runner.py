@@ -80,6 +80,7 @@ class SyncRunner:
         self.logger.info(f"[DEBUG] Metrics collector inicializado")
         
         self._running_syncs: Set[str] = set()
+        self._run_ids: Dict[str, int] = {}
         self.logger.info(f"[DEBUG] SyncRunner.__init__ concluído")
 
     def _send_telemetry(self, event_type: str, status: str, mapping_config: Optional[Dict] = None, **kwargs):
@@ -117,9 +118,13 @@ class SyncRunner:
             # Como send_healthcheck é síncrono (requests), isso adiciona latência.
             # Idealmente seria async, mas Runner é async def, http_client é sync.
             # Para evitar travar loop, poderíamos usar thread, mas vamos manter simples por enquanto.
-            success, msg = http_client.send_healthcheck(secret="", payload=payload, token=token)
+            # Enviar e capturar resposta
+            success, response = http_client.send_healthcheck(secret="", payload=payload, token=token)
             if not success:
-               self.logger.warning(f"⚠️ Falha no envio de telemetria ({event_type}): {msg}")
+               self.logger.warning(f"⚠️ Falha no envio de telemetria ({event_type}): {response}")
+               return None
+            
+            return response
 
         except Exception as e:
             self.logger.warning(f"⚠️ Erro ao processar telemetria: {e}")
@@ -186,11 +191,14 @@ class SyncRunner:
                 self.logger.info(f"[DEBUG] Pulando validação de conexão (skip_validation=True)")
             
             # Telemetria: Run Start
-            self._send_telemetry(
+            start_resp = self._send_telemetry(
                 event_type="run_start",
                 status="success", # Start é sempre success se chegou aqui
                 mapping_config=mapping_config
             )
+            
+            if start_resp and isinstance(start_resp, dict) and 'id' in start_resp:
+                self._run_ids[mapping_name] = start_resp['id']
 
             
             # Extrair dados
@@ -217,6 +225,7 @@ class SyncRunner:
                 self.logger.warning(f"⚠️  {msg}")
 
                 # Telemetria: Run End (Skipped)
+                run_id_val = self._run_ids.get(mapping_name)
                 self._send_telemetry(
                     event_type="run_end",
                     status="success", # Considerado sucesso (skipped)
@@ -225,7 +234,8 @@ class SyncRunner:
                     items_processed=records_count,
                     bytes_uploaded=0,
                     retry_count=0,
-                    error_message=msg
+                    error_message=msg,
+                    id=run_id_val
                 )
 
                 return SyncResult(
@@ -324,6 +334,7 @@ class SyncRunner:
             )
             
             # Telemetria: Run End
+            run_id_val = self._run_ids.get(mapping_name)
             self._send_telemetry(
                 event_type="run_end",
                 status="success" if sync_success else "error",
@@ -332,7 +343,8 @@ class SyncRunner:
                 items_processed=total_records,
                 bytes_uploaded=total_size if 'total_size' in locals() else 0,
                 retry_count=total_retries if 'total_retries' in locals() else 0,
-                error_message=None if sync_success else "Falha no upload"
+                error_message=None if sync_success else "Falha no upload",
+                id=run_id_val
             )
 
             return result
@@ -361,7 +373,8 @@ class SyncRunner:
                 mapping_config=current_config,
                 duration_ms=int(timer.elapsed() * 1000),
                 error_message=error_msg,
-                error_stack=str(e) # stacktrace seria melhor, mas msg serve por enquanto
+                error_stack=str(e), # stacktrace seria melhor, mas msg serve por enquanto
+                id=self._run_ids.get(mapping_name)
             )
 
             return SyncResult(
@@ -371,6 +384,7 @@ class SyncRunner:
                 duration_seconds=timer.elapsed()
             )
         finally:
+            self._run_ids.pop(mapping_name, None)
             self._running_syncs.discard(mapping_name)
     
     async def sync_multiple_mappings(

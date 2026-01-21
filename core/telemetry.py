@@ -66,7 +66,8 @@ class TelemetryCollector:
         error_message: Optional[str] = None,
         error_code: Optional[str] = None,
         error_stack: Optional[str] = None,
-        error_context: Optional[Dict] = None
+        error_context: Optional[Dict] = None,
+        id: Optional[int] = None
     ) -> Dict[str, Any]:
         """
         Constrói o payload padrão para envio de telemetria.
@@ -75,7 +76,7 @@ class TelemetryCollector:
         # Gerar idempotency key único para este evento
         idempotency_key = f"evt-{uuid.uuid4()}"
         
-        return {
+        payload = {
             "bridge_name": self._get_bridge_name(),
             "event_type": event_type,
             "status": status,
@@ -96,6 +97,11 @@ class TelemetryCollector:
             "error_stack": error_stack,
             "error_context": error_context
         }
+
+        if id is not None:
+            payload["id"] = id
+            
+        return payload
 
 # Instância global
 telemetry = TelemetryCollector()
