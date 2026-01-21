@@ -103,13 +103,15 @@ class SyncRunner:
             
             if mapping_config:
                 # Determinar source e destination com mais detalhes
-                src_type = mapping_config.get('source_type') or "unknown"
+                # User Request: Usar "Nome da Fonte" + "Tabela" (ex: datasnap/tenant_logs)
+                # Prioridade: source.name -> source_type
+                source_name = mapping_config.get('source', {}).get('name') or mapping_config.get('source_type') or "unknown"
                 detail = mapping_config.get('table_name') or mapping_config.get('object_name')
                 
                 if detail:
-                    source = f"{src_type}/{detail}"
+                    source = f"{source_name}/{detail}"
                 else:
-                    source = mapping_config.get('source', {}).get('name') or src_type
+                    source = source_name
 
                 destination = mapping_config.get('schema_slug') or mapping_config.get('schema', {}).get('slug') or "unknown"
             
