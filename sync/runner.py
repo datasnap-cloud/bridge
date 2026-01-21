@@ -97,12 +97,11 @@ class SyncRunner:
             except Exception as e:
                 self.logger.warning(f"⚠️ Não foi possível obter token para telemetria: {e}")
 
-            # Determinar source e destination
-            source = "datasnap-bridge"
-            destination = "datasnap-cloud"
+            # Determinar source e destination (não aplicável para heartbeat)
+            source = None
+            destination = None
             
-            if mapping_config:
-                # Determinar source e destination com mais detalhes
+            if event_type != "heartbeat" and mapping_config:
                 # User Request: Usar separador "." (ex: datasnap.webhooks)
                 # Keys corretas: source.name, table (não table_name)
                 source_name = mapping_config.get('source', {}).get('name') or mapping_config.get('source_type') or "unknown"
@@ -116,14 +115,18 @@ class SyncRunner:
 
                 destination = mapping_config.get('schema', {}).get('slug') or mapping_config.get('schema_slug') or "unknown"
             
-            # Construir payload
-            payload = telemetry.build_payload(
-                event_type=event_type,
-                status=status,
-                source=source,
-                destination=destination,
+            # Construir payload (source/destination podem ser None para heartbeat)
+            payload_kwargs = {
+                'event_type': event_type,
+                'status': status,
                 **kwargs
-            )
+            }
+            if source:
+                payload_kwargs['source'] = source
+            if destination:
+                payload_kwargs['destination'] = destination
+                
+            payload = telemetry.build_payload(**payload_kwargs)
             
             # Enviar (sem bloquear ou falhar o processo principal)
             # Como send_healthcheck é síncrono (requests), isso adiciona latência.
