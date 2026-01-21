@@ -43,14 +43,12 @@ class TelemetryCollector:
             return "n/a"
             
     def _get_bridge_name(self) -> str:
-        """Tenta obter o bridge_name da primeira API Key configurada"""
+        """Tenta obter o nome do bridge da primeira API Key configurada"""
         try:
             keys = secrets_store.list_keys()
             if keys:
-                # Retorna o primeiro bridge_name encontrado ou 'default'
-                for key in keys:
-                    if key.bridge_name:
-                        return key.bridge_name
+                # Retorna o nome da primeira API Key como identificador do Bridge
+                return keys[0].name
             return "default-bridge"
         except:
             return "unknown-bridge"

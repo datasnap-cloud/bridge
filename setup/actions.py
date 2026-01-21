@@ -70,7 +70,6 @@ def _display_api_keys_table(keys: List[APIKey]):
     table = Table(show_header=True, header_style="bold magenta")
     table.add_column("#", style="dim", width=3)
     table.add_column("Nome", style="cyan")
-    table.add_column("Bridge Name", style="blue")
     table.add_column("Token (final)", style="yellow", width=12)
     table.add_column("Criado em", style="green")
     
@@ -78,7 +77,6 @@ def _display_api_keys_table(keys: List[APIKey]):
         table.add_row(
             str(i),
             key.name,
-            key.bridge_name or "-",
             key.get_masked_token(),
             key.get_formatted_created_at()
         )
@@ -123,14 +121,7 @@ def register_api_key() -> bool:
                 continue
             break
         
-        # Solicitar bridge_name (opcional, mas recomendado)
-        bridge_name = Prompt.ask("Nome do Bridge (ex: prod-db-01)").strip()
-        if not bridge_name:
-            bridge_name = None
-        
         logger.debug(f"🔑 Token informado: {token[:10]}...")
-        if bridge_name:
-             logger.debug(f"🌉 Nome do Bridge: {bridge_name}")
         
         # Validar token
         console.print("\n[yellow]🔍 Validando token...[/yellow]")
@@ -148,12 +139,10 @@ def register_api_key() -> bool:
         # Salvar token
         logger.debug("💾 Salvando API Key no secrets store")
         console.print("[yellow]💾 Salvando...[/yellow]")
-        secrets_store.add_key(name, token, bridge_name=bridge_name)
+        secrets_store.add_key(name, token)
         
         logger.info(f"✅ API Key '{name}' cadastrada com sucesso")
         console.print(f"[green]✅ API Key cadastrada: {name}[/green]")
-        if bridge_name:
-            console.print(f"[dim]   Bridge Name: {bridge_name}[/dim]")
         return True
         
     except KeyboardInterrupt:
@@ -197,14 +186,6 @@ def edit_api_key(keys: List[APIKey]) -> bool:
         # Novo Nome (opcional)
         new_name = Prompt.ask(f"Novo Nome", default=target_key.name).strip()
         
-        # Novo Bridge Name (opcional)
-        current_bridge = target_key.bridge_name or ""
-        # Logica: se user der enter, mantem default (current_bridge). 
-        # Para limpar, user teria que digitar algo especifico? 
-        # Vamos assumir que Enter mantem. Para limpar, user digita "none" ou "clear"? 
-        # Simplificacao: Enter mantem. Espaço vazio mantem.
-        new_bridge_name = Prompt.ask(f"Novo Bridge Name", default=current_bridge).strip()
-        
         # Novo Token (opcional)
         new_token = Prompt.ask("Novo Token (deixe vazio para manter)", password=True).strip()
         
@@ -213,8 +194,7 @@ def edit_api_key(keys: List[APIKey]) -> bool:
             secrets_store.update_key(
                 current_name=target_key.name,
                 new_name=new_name if new_name != target_key.name else None,
-                new_token=new_token if new_token else None,
-                new_bridge_name=new_bridge_name if new_bridge_name != current_bridge else None
+                new_token=new_token if new_token else None
             )
             console.print("[green]✅ Key atualizada com sucesso![/green]")
             wait_for_continue()

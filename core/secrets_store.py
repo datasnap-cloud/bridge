@@ -19,7 +19,6 @@ class APIKey:
     name: str
     token: str
     created_at: str
-    bridge_name: Optional[str] = None
     
     def get_masked_token(self) -> str:
         """
@@ -90,6 +89,9 @@ class SecretsStore:
             for key_data in decrypted_data.get("keys", []):
                 # Ensure compatibility with older records
                 if all(field in key_data for field in ["name", "token", "created_at"]):
+                    # Ignorar bridge_name se existir
+                    if "bridge_name" in key_data:
+                        del key_data["bridge_name"]
                     self._keys.append(APIKey(**key_data))
             
             logger.info(f"✅ {len(self._keys)} API Keys carregadas com sucesso")
@@ -124,19 +126,18 @@ class SecretsStore:
             logger.exception(f"❌ Erro ao salvar API Keys: {e}")
             raise Exception(f"Erro ao salvar API Keys: {e}")
     
-    def add_key(self, name: str, token: str, bridge_name: Optional[str] = None) -> None:
+    def add_key(self, name: str, token: str) -> None:
         """
         Adiciona uma nova API Key
         
         Args:
             name: Nome da API Key
             token: Token da API Key
-            bridge_name: Nome do Bridge (opcional)
             
         Raises:
             ValueError: Se já existe uma key com o mesmo nome
         """
-        logger.debug(f"🔑 Adicionando nova API Key: {name} (Bridge: {bridge_name})")
+        logger.debug(f"🔑 Adicionando nova API Key: {name}")
         if not self._loaded:
             self.load()
         
@@ -149,13 +150,15 @@ class SecretsStore:
         new_key = APIKey(
             name=name,
             token=token,
-            created_at=datetime.utcnow().isoformat() + "Z",
-            bridge_name=bridge_name
+            created_at=datetime.utcnow().isoformat() + "Z"
         )
         
         self._keys.append(new_key)
         logger.debug(f"💾 Salvando API Key {name} no arquivo criptografado")
-    def update_key(self, current_name: str, new_name: Optional[str] = None, new_token: Optional[str] = None, new_bridge_name: Optional[str] = None) -> None:
+        self.save()
+        logger.info(f"✅ API Key '{name}' adicionada com sucesso")
+
+    def update_key(self, current_name: str, new_name: Optional[str] = None, new_token: Optional[str] = None) -> None:
         """
         Atualiza uma API Key existente.
         
@@ -163,7 +166,6 @@ class SecretsStore:
             current_name: Nome atual da API Key
             new_name: Novo nome (opcional)
             new_token: Novo token (opcional)
-            new_bridge_name: Novo nome do bridge (opcional)
             
         Raises:
             ValueError: Se a chave não for encontrada ou novo nome já existir
@@ -192,12 +194,6 @@ class SecretsStore:
         if new_token:
             self._keys[key_index].token = new_token
             
-        if new_bridge_name is not None:
-             # Permite definir como string ou None se string vazia for passada (dependendo da lógica de UI)
-             # Na UI, se passar "", deve virar None? Pela tipagem aqui, assumimos que quem chama trata.
-             # Se for passado algo, atualiza.
-             self._keys[key_index].bridge_name = new_bridge_name
-
         logger.debug(f"💾 Salvando alterações na API Key")
         self.save()
         logger.info(f"✅ API Key '{new_name or current_name}' atualizada com sucesso")
