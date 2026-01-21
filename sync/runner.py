@@ -50,6 +50,11 @@ class SyncResult:
     duration_seconds: float = 0.0
     error_message: Optional[str] = None
     warnings: List[str] = None
+    # Detalhes para o relatório visual
+    dest_name: str = "N/A"
+    extraction_status: str = "Pendente"  # Pendente, Sucesso, Erro, Skip
+    upload_status: str = "Pendente"      # Pendente, Sucesso, Erro, Skip, Dry-run
+    cleanup_status: str = "N/A"           # N/A, Sucesso, Erro, Ignorado
     
     def __post_init__(self):
         if self.warnings is None:
@@ -195,6 +200,12 @@ class SyncRunner:
             
             self.logger.info(f"[DEBUG] Configuração carregada com sucesso: {mapping_config}")
             
+            # Inicializar metadados para o relatório
+            dest_name = mapping_config.get('schema', {}).get('name', mapping_config.get('destination', {}).get('name', 'N/A'))
+            extraction_status = "Pendente"
+            upload_status = "Pendente"
+            cleanup_status = "N/A"
+            
             # Precisamos do schema_slug para iniciar as métricas
             schema_slug = mapping_config.get('schema_slug', mapping_name)
             self.metrics.start_sync_metrics(mapping_name, schema_slug)
@@ -222,12 +233,12 @@ class SyncRunner:
             # Extrair dados
             self.logger.info(f"[DEBUG] Iniciando extração de dados...")
             records = await self._extract_data(mapping_config, mapping_name)
+            extraction_status = "Sucesso"
             self.logger.info(f"[DEBUG] Extração concluída. Registros encontrados: {len(records) if records else 0}")
             
             if not records:
                 mapping_display_name = mapping_config.get('name') or mapping_name or 'N/A'
                 source_name = mapping_config.get('source', {}).get('name', 'N/A')
-                dest_name = mapping_config.get('schema', {}).get('name', mapping_config.get('destination', {}).get('name', 'N/A'))
                 self.logger.warning(f"📊 Nenhum registro encontrado para: {mapping_display_name} ({source_name} ➔ {dest_name})")
                 
                 # Telemetria: Run End (Empty)
@@ -247,7 +258,11 @@ class SyncRunner:
                 return SyncResult(
                     mapping_name=mapping_name,
                     success=True,
-                    duration_seconds=timer.elapsed()
+                    duration_seconds=timer.elapsed(),
+                    dest_name=dest_name,
+                    extraction_status="Vazio",
+                    upload_status="Skip",
+                    cleanup_status="N/A"
                 )
             
             # Verificar número mínimo de registros para upload
@@ -256,7 +271,6 @@ class SyncRunner:
             
             if min_records_for_upload > 0 and records_count < min_records_for_upload:
                 source_name = mapping_config.get('source', {}).get('name', 'N/A')
-                dest_name = mapping_config.get('schema', {}).get('name', mapping_config.get('destination', {}).get('name', 'N/A'))
                 mapping_display_name = mapping_config.get('name') or mapping_name or 'N/A'
                 
                 self.logger.info(f"📊 Registros encontrados para {mapping_display_name}: {records_count}")
@@ -283,7 +297,12 @@ class SyncRunner:
                     mapping_name=mapping_name,
                     success=True,
                     duration_seconds=timer.elapsed(),
-                    error_message=msg
+                    error_message=msg,
+                    dest_name=dest_name,
+                    extraction_status=f"Skip (<{min_records_for_upload})",
+                    upload_status="Skip",
+                    cleanup_status="N/A",
+                    records_processed=records_count
                 )
             
             self.logger.info(f"✅ Validação de número mínimo passou: {records_count} registros (mínimo: {min_records_for_upload})")
@@ -341,9 +360,14 @@ class SyncRunner:
                 
                 files_uploaded = len(files_info) if upload_success is True else 0
                 self.logger.warning(f"📊 Upload concluído para {mapping_name}: sucesso={upload_success}")
+                upload_status = "Sucesso" if upload_success else "Erro"
             else:
                 upload_success = True  # Em dry-run, consideramos sucesso
+                upload_status = "Dry-run"
                 self.logger.info(f"🔄 Modo dry-run ativo - pulando upload")
+            
+            extraction_status = "Sucesso"
+            cleanup_status = "N/A"
             
             # Calcular estatísticas
             total_records = len(records)
@@ -388,10 +412,13 @@ class SyncRunner:
                                 offset_file.unlink()
                             
                             self.logger.warning(f"✅ Arquivo de log limpo com sucesso! Tamanho: {size_before} bytes ➔ {size_after} bytes")
+                            cleanup_status = "Sucesso"
                         except Exception as e:
                             self.logger.warning(f"❌ Erro ao tentar limpar arquivo de log: {e}")
+                            cleanup_status = "Erro"
                     else:
                         self.logger.warning(f"ℹ️ Limpeza de log ignorada: Path={log_path}, Truncate={truncate}")
+                        cleanup_status = "Ignorado"
             
             # Atualizar watermark se houver registros e modo incremental e upload foi sucesso
             if upload_success and total_records > 0:
@@ -419,7 +446,11 @@ class SyncRunner:
                 files_created=files_created,
                 files_uploaded=files_uploaded,
                 duration_seconds=timer.elapsed(),
-                error_message=None if sync_success else "Falha no upload de arquivos"
+                error_message=None if sync_success else "Falha no upload de arquivos",
+                dest_name=dest_name,
+                extraction_status=extraction_status,
+                upload_status=upload_status,
+                cleanup_status=cleanup_status
             )
             
             self.logger.info(
@@ -483,7 +514,11 @@ class SyncRunner:
                 mapping_name=mapping_name,
                 success=False,
                 error_message=error_msg,
-                duration_seconds=timer.elapsed()
+                duration_seconds=timer.elapsed(),
+                dest_name=locals().get('dest_name', 'N/A'),
+                extraction_status=locals().get('extraction_status', 'Erro'),
+                upload_status=locals().get('upload_status', 'Pendente'),
+                cleanup_status=locals().get('cleanup_status', 'N/A')
             )
         finally:
             self._run_ids.pop(mapping_name, None)
@@ -1098,45 +1133,72 @@ async def run_sync_command(
 
 def format_sync_results(results: List[SyncResult]) -> str:
     """
-    Formata os resultados da sincronização para exibição.
-    
-    Args:
-        results: Lista de resultados
-        
-    Returns:
-        String formatada com os resultados
+    Formata os resultados da sincronização para exibição usando Rich Table.
     """
     if not results:
         return "Nenhuma sincronização executada."
     
-    lines = ["Resultados da Sincronização:", "=" * 50]
+    from rich.table import Table
+    from rich.console import Console
+    from rich import box
+    import io
+
+    console_buffer = io.StringIO()
+    # Usamos force_terminal=True para manter cores se desejado, 
+    # mas aqui vamos apenas criar a tabela e retorná-la
+    temp_console = Console(file=console_buffer, force_terminal=True, width=100)
     
     successful = [r for r in results if r.success]
     failed = [r for r in results if not r.success]
     
-    lines.append(f"Total: {len(results)} | Sucesso: {len(successful)} | Falhas: {len(failed)}")
-    lines.append("")
+    temp_console.print("\n[bold blue]📊 Resultados da Sincronização[/bold blue]")
+    temp_console.print(f"[dim]Total: {len(results)} | Sucesso: {len(successful)} | Falhas: {len(failed)}[/dim]\n")
     
-    if successful:
-        lines.append("✅ Sucessos:")
-        for result in successful:
-            duration = format_duration(result.duration_seconds)
-            lines.append(
-                f"  • {result.mapping_name}: {result.records_processed} registros, "
-                f"{result.files_uploaded} arquivos, {duration}"
-            )
-        lines.append("")
+    table = Table(
+        show_header=True, 
+        header_style="bold cyan", 
+        box=box.ROUNDED,
+        title_justify="left",
+        border_style="dim"
+    )
     
-    if failed:
-        lines.append("❌ Falhas:")
-        for result in failed:
-            lines.append(f"  • {result.mapping_name}: {result.error_message}")
-        lines.append("")
+    table.add_column("Mapeamento", style="cyan", no_wrap=True)
+    table.add_column("Destino", style="white")
+    table.add_column("Extração", justify="center")
+    table.add_column("Upload", justify="center")
+    table.add_column("Limpeza", justify="center")
+    table.add_column("Regs", justify="right", style="green")
+    table.add_column("Tempo", justify="right", style="dim")
+    
+    for r in results:
+        # Definição de cores/icones para os status
+        def get_status_rich(status):
+            if "Sucesso" in status or status == "Ativo":
+                return f"[green]✅ {status}[/green]"
+            if "Erro" in status or "Falha" in status:
+                return f"[red]❌ {status}[/red]"
+            if "Skip" in status or "Vazio" in status or "Ignorado" in status:
+                return f"[yellow]⚠️ {status}[/yellow]"
+            if "Dry-run" in status:
+                return f"[blue]🔍 {status}[/blue]"
+            return f"[dim]{status}[/dim]"
+        
+        table.add_row(
+            r.mapping_name,
+            r.dest_name,
+            get_status_rich(r.extraction_status),
+            get_status_rich(r.upload_status),
+            get_status_rich(r.cleanup_status),
+            str(r.records_processed),
+            format_duration(r.duration_seconds)
+        )
+    
+    temp_console.print(table)
     
     total_records = sum(r.records_processed for r in successful)
     total_files = sum(r.files_uploaded for r in successful)
     total_duration = sum(r.duration_seconds for r in results)
     
-    lines.append(f"Totais: {total_records} registros, {total_files} arquivos, {format_duration(total_duration)}")
+    temp_console.print(f"\n[bold]Totais:[/bold] [green]{total_records}[/green] registros, [cyan]{total_files}[/cyan] arquivos, [dim]{format_duration(total_duration)}[/dim]")
     
-    return "\n".join(lines)
+    return console_buffer.getvalue()
