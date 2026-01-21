@@ -221,13 +221,14 @@ class SyncRunner:
             
             # Extrair dados
             self.logger.info(f"[DEBUG] Iniciando extração de dados...")
-            records = await self._extract_data(mapping_config)
+            records = await self._extract_data(mapping_config, mapping_name)
             self.logger.info(f"[DEBUG] Extração concluída. Registros encontrados: {len(records) if records else 0}")
             
             if not records:
+                mapping_display_name = mapping_config.get('name') or mapping_name or 'N/A'
                 source_name = mapping_config.get('source', {}).get('name', 'N/A')
-                dest_name = mapping_config.get('destination', {}).get('name', 'N/A')
-                self.logger.warning(f"Nenhum registro encontrado para o mapeamento: {mapping_name} ({source_name} ➔ {dest_name})")
+                dest_name = mapping_config.get('schema', {}).get('name', mapping_config.get('destination', {}).get('name', 'N/A'))
+                self.logger.warning(f"📊 Nenhum registro encontrado para: {mapping_display_name} ({source_name} ➔ {dest_name})")
                 
                 # Telemetria: Run End (Empty)
                 run_id_val = self._run_ids.get(mapping_name)
@@ -256,7 +257,7 @@ class SyncRunner:
             if min_records_for_upload > 0 and records_count < min_records_for_upload:
                 source_name = mapping_config.get('source', {}).get('name', 'N/A')
                 dest_name = mapping_config.get('schema', {}).get('name', mapping_config.get('destination', {}).get('name', 'N/A'))
-                mapping_display_name = mapping_config.get('name', mapping_name)
+                mapping_display_name = mapping_config.get('name') or mapping_name or 'N/A'
                 
                 self.logger.info(f"📊 Registros encontrados para {mapping_display_name}: {records_count}")
                 self.logger.info(f"📋 Mínimo necessário: {min_records_for_upload}")
@@ -326,11 +327,22 @@ class SyncRunner:
                         files_info.append(file_info)
                         self.logger.debug(f"📄 Arquivo convertido: {file_path.name} -> {file_size} bytes, checksum: {checksum[:8]}...")
                 
-                self.logger.info(f"🚀 Iniciando upload de {len(files_info)} arquivos...")
-                upload_success, upload_error, upload_error_details = self._upload_files(files_info, mapping_name)
-                files_uploaded = len(files_info) if upload_success else 0
-                self.logger.info(f"📊 Upload concluído: sucesso={upload_success}, arquivos enviados={files_uploaded}")
+                self.logger.warning(f"🚀 Iniciando upload de {len(files_info)} arquivo(s): {mapping_name}")
+                upload_res = self._upload_files(files_info, mapping_name)
+                
+                if isinstance(upload_res, tuple) and len(upload_res) >= 1:
+                    upload_success = bool(upload_res[0])
+                    upload_error = upload_res[1] if len(upload_res) >= 2 else None
+                    upload_error_details = upload_res[2] if len(upload_res) >= 3 else None
+                else:
+                    upload_success = bool(upload_res)
+                    upload_error = "Formato de retorno de upload inválido"
+                    upload_error_details = None
+                
+                files_uploaded = len(files_info) if upload_success is True else 0
+                self.logger.warning(f"📊 Upload concluído para {mapping_name}: sucesso={upload_success}")
             else:
+                upload_success = True  # Em dry-run, consideramos sucesso
                 self.logger.info(f"🔄 Modo dry-run ativo - pulando upload")
             
             # Calcular estatísticas
@@ -338,7 +350,7 @@ class SyncRunner:
             files_created = len(jsonl_files)
             
             # Deletar registros do banco se delete_after_upload estiver habilitado e upload foi bem-sucedido
-            if (upload_success == True) and total_records > 0:
+            if (upload_success is True) and total_records > 0:
                 await self._handle_delete_after_upload(mapping_config, records, mapping_name)
                 
                 # Limpar Laravel log após upload bem-sucedido
@@ -348,7 +360,10 @@ class SyncRunner:
                 if source_type == 'laravel_log':
                     # Resolvemos a config para pegar o path real do datasource
                     resolved_config = _resolve_source_config(mapping_config)
-                    log_path = resolved_config.get('path') or resolved_config.get('file_path') if resolved_config else None
+                    log_path = None
+                    if resolved_config:
+                        log_path = resolved_config.get('path') or resolved_config.get('file_path')
+                    
                     truncate = source_config_raw.get('truncate_after_sync', True)  # Default: truncar
                     
                     if log_path and truncate:
@@ -376,14 +391,14 @@ class SyncRunner:
                         except Exception as e:
                             self.logger.warning(f"❌ Erro ao tentar limpar arquivo de log: {e}")
                     else:
-                        self.logger.debug(f"ℹ️ Limpeza de log ignorada: Path={log_path}, Truncate={truncate}")
+                        self.logger.warning(f"ℹ️ Limpeza de log ignorada: Path={log_path}, Truncate={truncate}")
             
             # Atualizar watermark se houver registros e modo incremental e upload foi sucesso
-            if (upload_success == True) and total_records > 0:
+            if upload_success and total_records > 0:
                 self._update_watermark(mapping_config, records)
             
             # Determinar se a sincronização foi bem-sucedida
-            sync_success = (upload_success == True) or self.config.dry_run  # Comparação explícita com True para evitar Truthy tuples
+            sync_success = upload_success or self.config.dry_run
             
             # Atualizar estado baseado no resultado do upload
             if sync_success:
@@ -614,15 +629,15 @@ class SyncRunner:
             self.logger.error(f"💥 Erro ao testar conexão: {e}")
             raise ConnectionError(f"Erro ao testar conexão: {e}")
     
-    async def _extract_data(self, mapping_config: Dict) -> List[Dict]:
+    async def _extract_data(self, mapping_config: Dict, mapping_name: str) -> List[Dict]:
         """Extrai dados da fonte."""
         # Se 'name' não existir, tenta pegar do mapping_name do runner
-        mapping_name_val = mapping_config.get('name') or getattr(self, 'mapping_name_current', 'N/A')
+        mapping_display_name = mapping_config.get('name') or mapping_name or 'N/A'
         source_name = mapping_config.get('source', {}).get('name', 'N/A')
-        dest_name = mapping_config.get('schema', {}).get('name', 'N/A')
+        dest_name = mapping_config.get('schema', {}).get('name', mapping_config.get('destination', {}).get('name', 'N/A'))
         
         try:
-            self.logger.warning(f"📊 Iniciando extração: {mapping_name_val} ({source_name} ➔ {dest_name})")
+            self.logger.warning(f"📊 Iniciando extração: {mapping_display_name} ({source_name} ➔ {dest_name})")
             self.logger.debug(f"🔧 Configuração: {mapping_config.get('source_type', 'N/A')} -> {mapping_config.get('table_name', 'N/A')}")
             
             extraction_result = await asyncio.to_thread(
@@ -692,7 +707,7 @@ class SyncRunner:
             self.logger.error(f"💥 Erro ao escrever arquivos JSONL: {e}")
             raise RuntimeError(f"Erro ao escrever arquivos JSONL: {e}")
     
-    def _upload_files(self, files_info: List[JSONLFileInfo], mapping_name: str) -> bool:
+    def _upload_files(self, files_info: List[JSONLFileInfo], mapping_name: str) -> Tuple[bool, Optional[str], Optional[Dict]]:
         """
         Faz upload dos arquivos JSONL.
         
@@ -701,14 +716,14 @@ class SyncRunner:
             mapping_name: Nome do mapeamento
             
         Returns:
-            True se todos os uploads foram bem-sucedidos
+            Tupla (sucesso, mensagem_erro, detalhes_erro)
         """
         if not files_info:
             self.logger.info(f"📤 Nenhum arquivo para upload no mapeamento {mapping_name}")
-            return True
+            return True, None, None
         
         start_time = get_current_timestamp()
-        self.logger.info(f"📤 Iniciando upload de {len(files_info)} arquivo(s) para o mapeamento {mapping_name}")
+        self.logger.warning(f"📤 Iniciando upload de {len(files_info)} arquivo(s) para: {mapping_name}")
         
         # Log detalhado dos arquivos que serão enviados
         total_size = 0
@@ -758,9 +773,9 @@ class SyncRunner:
             # Log detalhado dos resultados
             for result in results:
                 if result.success:
-                    self.logger.info(f"✅ Upload bem-sucedido: {result.file_info.file_path.name} -> upload_id: {result.upload_id}")
+                    self.logger.warning(f"✅ Upload bem-sucedido: {result.file_info.file_path.name} -> upload_id: {result.upload_id}")
                 else:
-                    self.logger.error(f"❌ Upload falhou: {result.file_info.file_path.name} -> erro: {result.error_message}")
+                    self.logger.warning(f"❌ Upload falhou: {result.file_info.file_path.name} -> erro: {result.error_message}")
             
             # Atualiza métricas
             total_records = sum(result.file_info.record_count for result in successful_uploads)
@@ -774,7 +789,7 @@ class SyncRunner:
             )
             
             if len(failed_uploads) == 0:
-                self.logger.info(f"🎉 Todos os uploads foram bem-sucedidos para {mapping_name}")
+                self.logger.warning(f"🎉 Todos os uploads foram bem-sucedidos para: {mapping_name}")
                 error_msg = None
                 error_details = None
             else:
