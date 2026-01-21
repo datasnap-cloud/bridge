@@ -35,7 +35,7 @@ app = typer.Typer(
     add_completion=False
 )
 
-console = Console()
+console = Console(markup=True)
 
 
 @app.command()
@@ -151,7 +151,7 @@ def sync(
         logger.info(f"[DEBUG] asyncio.run retornou com {len(results)} resultados")
         
         # Exibir resultados
-        console.print("\n" + format_sync_results(results))
+        console.print(format_sync_results(results))
         
         # Verificar se houve falhas
         failed_count = len([r for r in results if not r.success])

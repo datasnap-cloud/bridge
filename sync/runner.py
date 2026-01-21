@@ -1131,74 +1131,75 @@ async def run_sync_command(
         raise
 
 
-def format_sync_results(results: List[SyncResult]) -> str:
+
+def format_sync_results(results: List[SyncResult]):
     """
     Formata os resultados da sincronização para exibição usando Rich Table.
+    Versão ultralight focada em compatibilidade máxima (SSH/Forge/Narrow terminals).
     """
     if not results:
-        return "Nenhuma sincronização executada."
+        return "[yellow]Nenhuma sincronização executada.[/yellow]"
     
     from rich.table import Table
-    from rich.console import Console
     from rich import box
-    import io
+    from rich.console import Group
 
-    console_buffer = io.StringIO()
-    # Usamos force_terminal=True para manter cores se desejado, 
-    # mas aqui vamos apenas criar a tabela e retorná-la
-    temp_console = Console(file=console_buffer, force_terminal=True, width=100)
-    
     successful = [r for r in results if r.success]
     failed = [r for r in results if not r.success]
     
-    temp_console.print("\n[bold blue]📊 Resultados da Sincronização[/bold blue]")
-    temp_console.print(f"[dim]Total: {len(results)} | Sucesso: {len(successful)} | Falhas: {len(failed)}[/dim]\n")
+    # Resumo descritivo sem emojis para evitar problemas de caractere em SSH
+    header = (
+        "\n[bold blue]Resultados da Sincronizacao[/bold blue]\n"
+        f"[dim]Total: {len(results)} | Sucesso: {len(successful)} | Falhas: {len(failed)}[/dim]\n"
+    )
     
     table = Table(
         show_header=True, 
         header_style="bold cyan", 
-        box=box.ROUNDED,
-        title_justify="left",
-        border_style="dim"
+        box=box.ASCII, # Bordas de texto puro (+--+)
+        border_style="dim",
+        collapse_padding=True,
+        pad_edge=False,
+        expand=False
     )
     
-    table.add_column("Mapeamento", style="cyan", no_wrap=True)
-    table.add_column("Destino", style="white")
-    table.add_column("Extração", justify="center")
-    table.add_column("Upload", justify="center")
-    table.add_column("Limpeza", justify="center")
-    table.add_column("Regs", justify="right", style="green")
-    table.add_column("Tempo", justify="right", style="dim")
+    # Colunas com largura máxima para evitar que a tabela "esparrame"
+    table.add_column("Mapeamento", style="cyan", no_wrap=True, max_width=25)
+    table.add_column("Destino", style="white", no_wrap=True, max_width=25)
+    table.add_column("Extracao", justify="center", width=10)
+    table.add_column("Upload", justify="center", width=10)
+    table.add_column("Limpeza", justify="center", width=10)
+    table.add_column("Regs", justify="right", style="green", width=7)
+    table.add_column("Tempo", justify="right", style="dim", width=8)
     
     for r in results:
-        # Definição de cores/icones para os status
-        def get_status_rich(status):
-            if "Sucesso" in status or status == "Ativo":
-                return f"[green]✅ {status}[/green]"
-            if "Erro" in status or "Falha" in status:
-                return f"[red]❌ {status}[/red]"
-            if "Skip" in status or "Vazio" in status or "Ignorado" in status:
-                return f"[yellow]⚠️ {status}[/yellow]"
-            if "Dry-run" in status:
-                return f"[blue]🔍 {status}[/blue]"
+        def get_status_tag(status):
+            s = str(status).lower()
+            if "sucesso" in s or "ativo" in s: 
+                return "[bold green]OK[/bold green]"
+            if "erro" in s or "falha" in s: 
+                return "[bold red]ERR[/bold red]"
+            if "skip" in s or "vazio" in s or "ignorado" in s: 
+                return "[bold yellow]SKIP[/bold yellow]"
             return f"[dim]{status}[/dim]"
         
         table.add_row(
             r.mapping_name,
             r.dest_name,
-            get_status_rich(r.extraction_status),
-            get_status_rich(r.upload_status),
-            get_status_rich(r.cleanup_status),
+            get_status_tag(r.extraction_status),
+            get_status_tag(r.upload_status),
+            get_status_tag(r.cleanup_status),
             str(r.records_processed),
             format_duration(r.duration_seconds)
         )
-    
-    temp_console.print(table)
     
     total_records = sum(r.records_processed for r in successful)
     total_files = sum(r.files_uploaded for r in successful)
     total_duration = sum(r.duration_seconds for r in results)
     
-    temp_console.print(f"\n[bold]Totais:[/bold] [green]{total_records}[/green] registros, [cyan]{total_files}[/cyan] arquivos, [dim]{format_duration(total_duration)}[/dim]")
+    footer = (
+        f"\n[bold]Totais:[/bold] {total_records} registros, "
+        f"{total_files} arquivos, {format_duration(total_duration)}\n"
+    )
     
-    return console_buffer.getvalue()
+    return Group(header, table, footer)
