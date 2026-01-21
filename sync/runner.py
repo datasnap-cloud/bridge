@@ -329,14 +329,30 @@ class SyncRunner:
             if upload_success and total_records > 0:
                 await self._handle_delete_after_upload(mapping_config, records, mapping_name)
                 
-                # Commit Laravel log offset se for fonte de logs
+                # Limpar Laravel log após upload bem-sucedido
                 source_config = mapping_config.get('source', {})
                 source_type = source_config.get('type')
                 if source_type == 'laravel_log':
-                    from sync.extractor import commit_laravel_log_offset
-                    truncate = source_config.get('truncate_after_sync', False)
-                    commit_laravel_log_offset(source_config, truncate=truncate)
-                    self.logger.info(f"✅ Offset/cleanup de Laravel log confirmado")
+                    log_path = source_config.get('path') or source_config.get('file_path')
+                    truncate = source_config.get('truncate_after_sync', True)  # Default: truncar
+                    
+                    if log_path and truncate:
+                        try:
+                            import os
+                            from pathlib import Path
+                            
+                            # Trunca o arquivo de log
+                            with open(log_path, 'w') as f:
+                                f.truncate(0)
+                            
+                            # Remove arquivo de offset se existir
+                            offset_file = Path(log_path).with_suffix('.offset')
+                            if offset_file.exists():
+                                offset_file.unlink()
+                            
+                            self.logger.info(f"🧹 Arquivo de log truncado: {log_path}")
+                        except Exception as e:
+                            self.logger.warning(f"⚠️ Não foi possível truncar arquivo de log: {e}")
             
             # Atualizar watermark se houver registros e modo incremental
             if total_records > 0:
