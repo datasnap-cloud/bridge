@@ -13,6 +13,7 @@ from typing import Dict, List, Optional, Set, Tuple
 
 from core.mapping_state_store import MappingStateStore
 from core.paths import BridgePaths
+from core.secrets_store import secrets_store
 from core.timeutil import Timer, get_current_timestamp, format_duration
 from datasnap.api import DataSnapAPI
 from sync.extractor import extract_mapping_data, test_source_connection
@@ -85,11 +86,13 @@ class SyncRunner:
         """Helper para envio seguro de telemetria"""
         try:
             # Obter token válido
+            # Obter token válido
             token = None
             try:
-                # Tenta obter token do cache se disponível
-                if self.token_cache:
-                    token = self.token_cache.get_token()
+                # Tenta obter API Key do sistema (preferencial)
+                keys = secrets_store.list_keys()
+                if keys:
+                    token = keys[0].token
             except Exception as e:
                 self.logger.warning(f"⚠️ Não foi possível obter token para telemetria: {e}")
 
