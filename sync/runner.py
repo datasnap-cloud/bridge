@@ -221,7 +221,9 @@ class SyncRunner:
             self.logger.info(f"[DEBUG] Extração concluída. Registros encontrados: {len(records) if records else 0}")
             
             if not records:
-                self.logger.warning(f"Nenhum registro encontrado para o mapeamento: {mapping_name}")
+                source_name = mapping_config.get('source', {}).get('name', 'N/A')
+                dest_name = mapping_config.get('destination', {}).get('name', 'N/A')
+                self.logger.warning(f"Nenhum registro encontrado para o mapeamento: {mapping_name} ({source_name} ➔ {dest_name})")
                 
                 # Telemetria: Run End (Empty)
                 run_id_val = self._run_ids.get(mapping_name)
@@ -248,9 +250,12 @@ class SyncRunner:
             records_count = len(records)
             
             if min_records_for_upload > 0 and records_count < min_records_for_upload:
+                source_name = mapping_config.get('source', {}).get('name', 'N/A')
+                dest_name = mapping_config.get('destination', {}).get('name', 'N/A')
                 self.logger.info(f"📊 Registros encontrados: {records_count}")
                 self.logger.info(f"📋 Mínimo necessário: {min_records_for_upload}")
-                msg = f"Upload cancelado: {records_count} registros encontrados, mínimo necessário: {min_records_for_upload}"
+                
+                msg = f"Upload skip: {mapping_name} ({source_name} ➔ {dest_name}) | {records_count} registros encontrados, mínimo necessário: {min_records_for_upload}"
                 self.logger.warning(f"⚠️  {msg}")
 
                 # Telemetria: Run End (Skipped)
@@ -341,18 +346,25 @@ class SyncRunner:
                             import os
                             from pathlib import Path
                             
+                            path_obj = Path(log_path)
+                            size_before = path_obj.stat().st_size if path_obj.exists() else 0
+                            
+                            self.logger.info(f"🧹 Tentando limpar arquivo de log: {log_path} (Tamanho atual: {size_before} bytes)")
+                            
                             # Trunca o arquivo de log
                             with open(log_path, 'w') as f:
                                 f.truncate(0)
                             
+                            size_after = path_obj.stat().st_size if path_obj.exists() else 0
+                            
                             # Remove arquivo de offset se existir
-                            offset_file = Path(log_path).with_suffix('.offset')
+                            offset_file = path_obj.with_suffix('.offset')
                             if offset_file.exists():
                                 offset_file.unlink()
                             
-                            self.logger.info(f"🧹 Arquivo de log truncado: {log_path}")
+                            self.logger.info(f"✅ Arquivo de log limpo com sucesso! Tamanho: {size_before} bytes ➔ {size_after} bytes")
                         except Exception as e:
-                            self.logger.warning(f"⚠️ Não foi possível truncar arquivo de log: {e}")
+                            self.logger.warning(f"❌ Erro ao tentar limpar arquivo de log: {e}")
             
             # Atualizar watermark se houver registros e modo incremental
             if total_records > 0:
