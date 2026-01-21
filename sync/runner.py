@@ -102,7 +102,15 @@ class SyncRunner:
             destination = "datasnap-cloud"
             
             if mapping_config:
-                source = mapping_config.get('source', {}).get('name') or mapping_config.get('source_type') or "unknown"
+                # Determinar source e destination com mais detalhes
+                src_type = mapping_config.get('source_type') or "unknown"
+                detail = mapping_config.get('table_name') or mapping_config.get('object_name')
+                
+                if detail:
+                    source = f"{src_type}/{detail}"
+                else:
+                    source = mapping_config.get('source', {}).get('name') or src_type
+
                 destination = mapping_config.get('schema_slug') or mapping_config.get('schema', {}).get('slug') or "unknown"
             
             # Construir payload
