@@ -255,6 +255,7 @@ class SyncRunner:
             # Upload dos arquivos
             upload_success = True
             upload_error = None
+            upload_error_details = None
             files_uploaded = 0
             if not self.config.dry_run:
                 self.logger.info(f"🔄 Convertendo Path objects para JSONLFileInfo...")
@@ -285,7 +286,7 @@ class SyncRunner:
                         self.logger.debug(f"📄 Arquivo convertido: {file_path.name} -> {file_size} bytes, checksum: {checksum[:8]}...")
                 
                 self.logger.info(f"🚀 Iniciando upload de {len(files_info)} arquivos...")
-                upload_success, upload_error = self._upload_files(files_info, mapping_name)
+                upload_success, upload_error, upload_error_details = self._upload_files(files_info, mapping_name)
                 files_uploaded = len(files_info) if upload_success else 0
                 self.logger.info(f"📊 Upload concluído: sucesso={upload_success}, arquivos enviados={files_uploaded}")
             else:
@@ -336,6 +337,12 @@ class SyncRunner:
             
             # Telemetria: Run End
             run_id_val = self._run_ids.get(mapping_name)
+            
+            # Prepara kwargs de erro se houver
+            telemetry_error_kwargs = {}
+            if not sync_success and upload_error_details:
+                telemetry_error_kwargs = upload_error_details
+                
             self._send_telemetry(
                 event_type="run_end",
                 status="success" if sync_success else "error",
@@ -345,7 +352,8 @@ class SyncRunner:
                 bytes_uploaded=total_size if 'total_size' in locals() else 0,
                 retry_count=total_retries if 'total_retries' in locals() else 0,
                 error_message=None if sync_success else (upload_error or "Falha no upload"),
-                id=run_id_val
+                id=run_id_val,
+                **telemetry_error_kwargs
             )
 
             return result
@@ -685,9 +693,20 @@ class SyncRunner:
             if len(failed_uploads) == 0:
                 self.logger.info(f"🎉 Todos os uploads foram bem-sucedidos para {mapping_name}")
                 error_msg = None
+                error_details = None
             else:
+                # Coleta mensagens de erro
                 error_msgs = [f"{r.file_info.file_path.name}: {r.error_message}" for r in failed_uploads]
                 error_msg = "; ".join(error_msgs)
+                
+                # Coleta detalhes do primeiro erro para telemetria (priorizando o que tem mais informação)
+                first_failure = failed_uploads[0]
+                error_details = {
+                    'error_code': first_failure.error_code,
+                    'error_stack': first_failure.error_stack,
+                    'error_context': first_failure.error_context
+                }
+                
                 self.logger.warning(f"⚠️ {len(failed_uploads)} upload(s) falharam para {mapping_name}: {error_msg}")
             
             # Limpar arquivos temporários após upload (sucesso ou falha)
@@ -697,12 +716,19 @@ class SyncRunner:
             except Exception as e:
                 self.logger.warning(f"⚠️ Erro durante limpeza de arquivos temporários: {e}")
             
-            return len(failed_uploads) == 0, error_msg
+            return len(failed_uploads) == 0, error_msg, error_details
             
         except Exception as e:
             msg = f"Erro crítico durante processo de upload: {e}"
             self.logger.error(f"💥 {msg}")
-            return False, msg
+            
+            import traceback
+            error_details = {
+                'error_code': type(e).__name__,
+                'error_stack': traceback.format_exc(),
+                'error_context': {}
+            }
+            return False, msg, error_details
     
     def _cleanup_temp_files_for_mapping(self, mapping_name: str) -> None:
         """

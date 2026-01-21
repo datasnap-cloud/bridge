@@ -29,6 +29,9 @@ class UploadResult:
     file_info: JSONLFileInfo
     upload_id: Optional[str] = None
     error_message: Optional[str] = None
+    error_code: Optional[str] = None
+    error_stack: Optional[str] = None
+    error_context: Optional[Dict[str, Any]] = None
     upload_time: Optional[int] = None
     upload_duration: Optional[int] = None
     bytes_uploaded: Optional[int] = None
@@ -186,6 +189,11 @@ class FileUploader:
         logger.debug(f"🗂️ Mapping: {mapping_name or 'N/A'}")
         logger.debug(f"🔄 Máximo de tentativas: {self.max_retries + 1}")
         
+        last_error_details = None
+        last_error_code = None
+        last_error_stack = None
+        last_error_context = None
+        
         for attempt in range(self.max_retries + 1):
             try:
                 logger.info(f"🔄 Tentativa {attempt + 1}/{self.max_retries + 1} para {file_info.file_path.name}")
@@ -199,6 +207,7 @@ class FileUploader:
                         success=False,
                         file_info=file_info,
                         error_message="Falha ao obter token de upload",
+                        error_code="TOKEN_ERROR",
                         retry_count=attempt
                     )
                 
@@ -227,19 +236,41 @@ class FileUploader:
                         retry_count=attempt
                     )
                 else:
-                    logger.warning(f"⚠️ Upload falhou na tentativa {attempt + 1}")
+                    # Should not reach here if _perform_upload raises exceptions on error
+                    logger.warning(f"⚠️ Upload falhou na tentativa {attempt + 1} (sem exceção)")
                 
             except Exception as e:
                 retry_count = attempt
-                logger.warning(f"💥 Tentativa {attempt + 1} falhou: {e}")
+                import traceback
                 
-                # Invalidar cache se for erro de autenticação ou não encontrado
+                # Capturar detalhe do erro para telemetria
+                last_error_message = str(e)
+                last_error_stack = traceback.format_exc()
+                last_error_code = type(e).__name__
+                last_error_context = {}
+                
                 if isinstance(e, requests.exceptions.HTTPError) and e.response is not None:
                     status = e.response.status_code
+                    last_error_code = str(status)
+                    
+                    # Tenta capturar corpo da resposta (JSON ou texto)
+                    try:
+                        try:
+                            last_error_context['response_body'] = e.response.json()
+                        except:
+                            last_error_context['response_body'] = e.response.text
+                    except:
+                        pass
+                        
+                    last_error_context['response_headers'] = dict(e.response.headers)
+                    last_error_context['url'] = e.response.url
+                    
                     if status in [401, 403, 404]:
                         logger.warning(f"⚠️ Erro {status} detectado. Invalidando token em cache para tentar renovação.")
                         self.token_cache.invalidate_token(schema_slug, mapping_name)
-
+                
+                logger.warning(f"💥 Tentativa {attempt + 1} falhou: {last_error_message}")
+                
                 if attempt < self.max_retries:
                     wait_time = 2 ** attempt  # Backoff exponencial
                     logger.info(f"⏳ Aguardando {wait_time}s antes da próxima tentativa...")
@@ -251,7 +282,10 @@ class FileUploader:
         return UploadResult(
             success=False,
             file_info=file_info,
-            error_message=f"Upload falhou após {self.max_retries + 1} tentativas",
+            error_message=last_error_details or f"Upload falhou após {self.max_retries + 1} tentativas. Erro: {last_error_message}",
+            error_code=last_error_code,
+            error_stack=last_error_stack,
+            error_context=last_error_context,
             retry_count=retry_count
         )
     
@@ -329,77 +363,72 @@ class FileUploader:
         Returns:
             ID do upload ou None
         """
-        try:
-            upload_url = token_info['upload_url']
-            upload_id = token_info['token_id']
-            
-            # Concatena o nome do arquivo JSONL à URL de upload
-            if not upload_url.endswith('/'):
-                upload_url += '/'
-            upload_url += file_info.file_path.name
-            
-            logger.info(f"📤 Iniciando upload do arquivo: {file_info.file_path.name}")
-            logger.debug(f"📁 Arquivo: {file_info.file_path}")
-            logger.debug(f"📏 Tamanho: {file_info.file_size:,} bytes")
-            logger.debug(f"🔍 Checksum: {file_info.checksum}")
-            logger.debug(f"🆔 Upload ID: {upload_id}")
-            logger.debug(f"🔗 URL de upload: {upload_url[:50]}...")
-            
-            # Configura rastreador de progresso
-            tracker = None
-            if progress_callback:
-                tracker = UploadProgressTracker(file_info.file_size, progress_callback)
-                logger.debug(f"📊 Rastreador de progresso configurado")
-            
-            # Lê o conteúdo do arquivo
-            with open(file_info.file_path, 'rb') as f:
-                file_content = f.read()
-            
-            # Prepara headers para o upload
-            headers = {
-                'Content-Type': 'application/octet-stream',
-                'Content-Length': str(len(file_content)),
-                'X-Upload-ID': str(upload_id),
-                'X-Checksum': file_info.checksum
-            }
-            
-            logger.debug(f"📋 Conteúdo do arquivo carregado")
-            logger.debug(f"🔧 Content-Type: application/octet-stream")
-            
-            # Faz o upload
-            logger.info(f"🚀 Executando PUT request para upload...")
-            logger.info(f"🌐 URL de upload: {upload_url}")
-            logger.info(f"📋 Método HTTP: PUT")
-            logger.info(f"📦 Arquivo: {file_info.file_path.name}")
-            logger.info(f"📏 Tamanho do arquivo: {len(file_content)} bytes")
-            logger.info(f"🔑 Upload ID: {upload_id}")
-            logger.info(f"🔐 Checksum: {file_info.checksum}")
-            
-            response = self.session.put(
-                upload_url,
-                data=file_content,
-                headers=headers,
-                timeout=self.timeout
-            )
-            
-            logger.info(f"📡 Status da resposta: {response.status_code}")
-            logger.info(f"📝 Headers da resposta: {dict(response.headers)}")
-            if response.status_code != 200:
-                logger.error(f"❌ Erro no upload - Status: {response.status_code}")
-                logger.error(f"📄 Conteúdo da resposta: {response.text}")
-            else:
-                logger.info(f"✅ Upload realizado com sucesso!")
-            
-            response.raise_for_status()
-            
-            logger.info(f"✅ Upload concluído com sucesso: {file_info.file_path.name}")
-            logger.debug(f"🎯 Upload ID retornado: {upload_id}")
-            return upload_id
-            
-        except Exception as e:
-            logger.error(f"💥 Erro durante upload de {file_info.file_path.name}: {e}")
-            logger.debug(f"🔍 Detalhes do erro: {str(e)}")
-            return None
+        # try/except removed to allow exception propagation to upload_file
+        upload_url = token_info['upload_url']
+        upload_id = token_info['token_id']
+        
+        # Concatena o nome do arquivo JSONL à URL de upload
+        if not upload_url.endswith('/'):
+            upload_url += '/'
+        upload_url += file_info.file_path.name
+        
+        logger.info(f"📤 Iniciando upload do arquivo: {file_info.file_path.name}")
+        logger.debug(f"📁 Arquivo: {file_info.file_path}")
+        logger.debug(f"📏 Tamanho: {file_info.file_size:,} bytes")
+        logger.debug(f"🔍 Checksum: {file_info.checksum}")
+        logger.debug(f"🆔 Upload ID: {upload_id}")
+        logger.debug(f"🔗 URL de upload: {upload_url[:50]}...")
+        
+        # Configura rastreador de progresso
+        tracker = None
+        if progress_callback:
+            tracker = UploadProgressTracker(file_info.file_size, progress_callback)
+            logger.debug(f"📊 Rastreador de progresso configurado")
+        
+        # Lê o conteúdo do arquivo
+        with open(file_info.file_path, 'rb') as f:
+            file_content = f.read()
+        
+        # Prepara headers para o upload
+        headers = {
+            'Content-Type': 'application/octet-stream',
+            'Content-Length': str(len(file_content)),
+            'X-Upload-ID': str(upload_id),
+            'X-Checksum': file_info.checksum
+        }
+        
+        logger.debug(f"📋 Conteúdo do arquivo carregado")
+        logger.debug(f"🔧 Content-Type: application/octet-stream")
+        
+        # Faz o upload
+        logger.info(f"🚀 Executando PUT request para upload...")
+        logger.info(f"🌐 URL de upload: {upload_url}")
+        logger.info(f"📋 Método HTTP: PUT")
+        logger.info(f"📦 Arquivo: {file_info.file_path.name}")
+        logger.info(f"📏 Tamanho do arquivo: {len(file_content)} bytes")
+        logger.info(f"🔑 Upload ID: {upload_id}")
+        logger.info(f"🔐 Checksum: {file_info.checksum}")
+        
+        response = self.session.put(
+            upload_url,
+            data=file_content,
+            headers=headers,
+            timeout=self.timeout
+        )
+        
+        logger.info(f"📡 Status da resposta: {response.status_code}")
+        logger.info(f"📝 Headers da resposta: {dict(response.headers)}")
+        if response.status_code != 200:
+            logger.error(f"❌ Erro no upload - Status: {response.status_code}")
+            logger.error(f"📄 Conteúdo da resposta: {response.text}")
+        else:
+            logger.info(f"✅ Upload realizado com sucesso!")
+        
+        response.raise_for_status()
+        
+        logger.info(f"✅ Upload concluído com sucesso: {file_info.file_path.name}")
+        logger.debug(f"🎯 Upload ID retornado: {upload_id}")
+        return upload_id
     
     def _file_generator(self, file_path: Path, tracker: Optional[UploadProgressTracker] = None):
         """
@@ -502,10 +531,13 @@ class BatchUploader:
                         
                 except Exception as e:
                     logger.error(f"Erro no upload de {file_info.file_path.name}: {e}")
+                    import traceback
                     results.append(UploadResult(
                         success=False,
                         file_info=file_info,
-                        error_message=str(e)
+                        error_message=str(e),
+                        error_code=type(e).__name__,
+                        error_stack=traceback.format_exc()
                     ))
         
         # Estatísticas finais
