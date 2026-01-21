@@ -103,17 +103,18 @@ class SyncRunner:
             
             if mapping_config:
                 # Determinar source e destination com mais detalhes
-                # User Request: Usar "Nome da Fonte" + "Tabela" (ex: datasnap/tenant_logs)
-                # Prioridade: source.name -> source_type
+                # User Request: Usar separador "." (ex: datasnap.webhooks)
+                # Keys corretas: source.name, table (não table_name)
                 source_name = mapping_config.get('source', {}).get('name') or mapping_config.get('source_type') or "unknown"
-                detail = mapping_config.get('table_name') or mapping_config.get('object_name')
+                # Ordem de prioridade: table -> table_name -> object_name
+                detail = mapping_config.get('table') or mapping_config.get('table_name') or mapping_config.get('object_name')
                 
                 if detail:
-                    source = f"{source_name}/{detail}"
+                    source = f"{source_name}.{detail}"
                 else:
                     source = source_name
 
-                destination = mapping_config.get('schema_slug') or mapping_config.get('schema', {}).get('slug') or "unknown"
+                destination = mapping_config.get('schema', {}).get('slug') or mapping_config.get('schema_slug') or "unknown"
             
             # Construir payload
             payload = telemetry.build_payload(
