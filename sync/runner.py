@@ -355,14 +355,21 @@ class SyncRunner:
                 self.logger.warning(f"🚀 Iniciando upload de {len(files_info)} arquivo(s): {mapping_name}")
                 upload_res = self._upload_files(files_info, mapping_name)
                 
-                if isinstance(upload_res, tuple) and len(upload_res) >= 1:
+                if isinstance(upload_res, tuple) and len(upload_res) >= 4:
+                    upload_success = bool(upload_res[0])
+                    upload_error = upload_res[1]
+                    upload_error_details = upload_res[2]
+                    total_retries = upload_res[3]
+                elif isinstance(upload_res, tuple) and len(upload_res) >= 1:
                     upload_success = bool(upload_res[0])
                     upload_error = upload_res[1] if len(upload_res) >= 2 else None
                     upload_error_details = upload_res[2] if len(upload_res) >= 3 else None
+                    total_retries = 0
                 else:
                     upload_success = bool(upload_res)
                     upload_error = "Formato de retorno de upload inválido"
                     upload_error_details = None
+                    total_retries = 0
                 
                 files_uploaded = len(files_info) if upload_success is True else 0
                 self.logger.warning(f"📊 Upload concluído para {mapping_name}: sucesso={upload_success}")
@@ -754,7 +761,7 @@ class SyncRunner:
             self.logger.error(f"💥 Erro ao escrever arquivos JSONL: {e}")
             raise RuntimeError(f"Erro ao escrever arquivos JSONL: {e}")
     
-    def _upload_files(self, files_info: List[JSONLFileInfo], mapping_name: str) -> Tuple[bool, Optional[str], Optional[Dict]]:
+    def _upload_files(self, files_info: List[JSONLFileInfo], mapping_name: str) -> Tuple[bool, Optional[str], Optional[Dict], int]:
         """
         Faz upload dos arquivos JSONL.
         
@@ -767,7 +774,7 @@ class SyncRunner:
         """
         if not files_info:
             self.logger.info(f"📤 Nenhum arquivo para upload no mapeamento {mapping_name}")
-            return True, None, None
+            return True, None, None, 0
         
         start_time = get_current_timestamp()
         self.logger.warning(f"📤 Iniciando upload de {len(files_info)} arquivo(s) para: {mapping_name}")
@@ -789,12 +796,14 @@ class SyncRunner:
             mapping_config = self._load_mapping_config(mapping_name)
             if not mapping_config:
                 self.logger.error(f"❌ Não foi possível carregar configuração do mapping: {mapping_name}")
-                return False, "Configuração não encontrada", None
+                self.logger.error(f"❌ Não foi possível carregar configuração do mapping: {mapping_name}")
+                return False, "Configuração não encontrada", None, 0
                 
             schema_slug = mapping_config.get('schema', {}).get('slug')
             if not schema_slug:
                 self.logger.error(f"❌ Schema slug não encontrado na configuração do mapping: {mapping_name}")
-                return False, "Schema slug não encontrado", None
+                self.logger.error(f"❌ Schema slug não encontrado na configuração do mapping: {mapping_name}")
+                return False, "Schema slug não encontrado", None, 0
                 
             self.logger.debug(f"🏷️ Schema slug para {mapping_name}: {schema_slug}")
             
@@ -856,12 +865,11 @@ class SyncRunner:
             
             # Limpar arquivos temporários após upload (sucesso ou falha)
             try:
-                self.logger.info(f"🧹 Limpando arquivos temporários...")
                 cleanup_uploaded_files(results, keep_failed=False)  # Remove todos os arquivos, incluindo os que falharam
             except Exception as e:
                 self.logger.warning(f"⚠️ Erro durante limpeza de arquivos temporários: {e}")
             
-            return len(failed_uploads) == 0, error_msg, error_details
+            return len(failed_uploads) == 0, error_msg, error_details, total_retries
             
         except Exception as e:
             msg = f"Erro crítico durante processo de upload: {e}"
