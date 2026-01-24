@@ -247,7 +247,7 @@ class SyncRunner:
                     event_type="run_end",
                     status="success",
                     mapping_config=mapping_config,
-                    duration_ms=int(timer.elapsed() * 1000),
+                    duration_ms=0,
                     items_processed=0,
                     bytes_uploaded=0,
                     retry_count=0,
@@ -285,8 +285,8 @@ class SyncRunner:
                     event_type="run_end",
                     status="success", # Considerado sucesso (skipped)
                     mapping_config=mapping_config,
-                    duration_ms=int(timer.elapsed() * 1000),
-                    items_processed=records_count,
+                    duration_ms=0,
+                    items_processed=0,
                     bytes_uploaded=0,
                     retry_count=0,
                     error_message=msg,
@@ -317,6 +317,8 @@ class SyncRunner:
             upload_error = None
             upload_error_details = None
             files_uploaded = 0
+            total_upload_bytes = 0
+            
             
             if not self.config.dry_run:
                 self.logger.info(f"🔄 Convertendo Path objects para JSONLFileInfo...")
@@ -329,6 +331,10 @@ class SyncRunner:
                 for file_path in jsonl_files:
                     if file_path.exists():
                         file_size = file_path.stat().st_size
+                        
+                        # Somar ao total de bytes para telemetria
+                        total_upload_bytes += file_size
+                        
                         # Calcular checksum simples
                         with open(file_path, 'rb') as f:
                             checksum = hashlib.md5(f.read()).hexdigest()
@@ -476,9 +482,10 @@ class SyncRunner:
                 event_type="run_end",
                 status="success" if sync_success else "error",
                 mapping_config=mapping_config,
-                duration_ms=int(timer.elapsed() * 1000),
-                items_processed=total_records,
-                bytes_uploaded=total_size if 'total_size' in locals() else 0,
+                mapping_config=mapping_config,
+                duration_ms=int(timer.elapsed() * 1000) if upload_success else 0,
+                items_processed=total_records if upload_success else 0,
+                bytes_uploaded=total_upload_bytes if upload_success else 0,
                 retry_count=total_retries if 'total_retries' in locals() else 0,
                 error_message=None if sync_success else (upload_error or "Falha no upload"),
                 id=run_id_val,
