@@ -489,7 +489,6 @@ class SyncRunner:
                 event_type="run_end",
                 status="success" if sync_success else "error",
                 mapping_config=mapping_config,
-                mapping_config=mapping_config,
                 duration_ms=int(timer.elapsed() * 1000) if upload_success else 0,
                 items_processed=total_records if upload_success else 0,
                 bytes_uploaded=total_upload_bytes if upload_success else 0,
