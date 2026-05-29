@@ -26,7 +26,7 @@ Feito para squads que querem começar **em minutos**: CLI pronta, templates de c
 #### 1. Clone o repositório
 ```bash
 git clone <repository-url>
-cd datasnap-bridge
+cd bridge
 ```
 
 #### 2. Crie um ambiente virtual
