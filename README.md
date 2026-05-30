@@ -21,6 +21,9 @@ Feito para squads que querem começar **em minutos**: CLI pronta, templates de c
 - **pip** (gerenciador de pacotes Python)
 - **Acesso à API DataSnap** (API Key necessária)
 
+> **Nota para Ubuntu/Debian**: Se necessário, instale os pacotes básicos executando:
+> `sudo apt update && sudo apt install -y python3 python3-pip python3-venv`
+
 ### Instalação do Ambiente
 
 #### 1. Clone o repositório
@@ -31,7 +34,7 @@ cd bridge
 
 #### 2. Crie um ambiente virtual
 ```bash
-python -m venv venv
+python3 -m venv venv
 
 # Linux/macOS
 source venv/bin/activate
