@@ -59,3 +59,5 @@ Thumbs.db
 .bridge/secrets.json
 .bridge/cache/
 .bridge/temp/
+# Added by code-review-graph
+.code-review-graph/
